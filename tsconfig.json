@@ -1,3 +1,26 @@
 {
-  "extends": "@react-native/typescript-config"
+  // Pastikan extends ini benar menunjuk ke package yang terinstal
+  "extends": "@react-native/typescript-config/tsconfig.json",
+
+  "compilerOptions": {
+    // Opsi penting:
+    "jsx": "react-native", // Memberitahu TS cara menangani JSX untuk RN
+    "strict": true, // Aktifkan pengecekan ketat (rekomendasi)
+    "skipLibCheck": true, // Lewati pengecekan tipe di node_modules
+
+    // Opsi lain mungkin ada di sini...
+    "baseUrl": ".", // Opsional: untuk path alias
+    "paths": {
+      // Opsional: untuk path alias
+      "*": ["src/*"]
+    }
+  },
+  // Pastikan file Boss masuk dalam kompilasi
+  "include": ["src/**/*", "index.js", "App.tsx"], // Sesuaikan jika perlu
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js"
+  ]
 }
