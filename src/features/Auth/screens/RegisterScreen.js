@@ -10,57 +10,171 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
-  Alert, // Untuk pesan sementara
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 
-import LockIcon from '../../../assets/images/lockIcon.svg';
 import PeopleIcon from '../../../assets/icon/PeopleIcon.svg';
-
-// --- Impor Aset (Ganti path jika perlu) ---
-// const userIcon = require('../../../assets/images/user_icon.png');
-// const lockIcon = require('../../../assets/images/lock_icon.png');
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
+import EyeOpenIcon from '../../../assets/icon/EyeOpenIcon.svg';
+import EyeClosedIcon from '../../../assets/icon/EyeClosedIcon.svg';
 
 const RegisterScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [gender, setGender] = useState('Male');
+  const [username, setUsername] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isEmailFocused, setIsEmailFocused] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
-    // --- TODO: Logika Registrasi ---
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match!');
+  // <<< 1. TAMBAHKAN STATE UNTUK VISIBILITY PASSWORD >>>
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
+    useState(false);
+
+  const [modalState, setModalState] = useState({
+    isVisible: false,
+    title: '',
+    message: '',
+    modalType: 'error',
+    onClose: () => {},
+  });
+
+  const handleSupabaseError = error => {
+    // ... (Fungsi ini tetap sama)
+    if (error.message.includes('User already registered')) {
+      return 'Email ini sudah terdaftar. Silakan login.';
+    }
+    if (error.message.includes('weak password')) {
+      return 'Password terlalu lemah. Gunakan minimal 6 karakter.';
+    }
+    if (
+      error.message.includes('rate limit') ||
+      error.message.includes('For security purposes')
+    ) {
+      return 'Anda terlalu sering mencoba. Silakan tunggu 1 menit.';
+    }
+    if (
+      error.message.includes('profiles_username_key') ||
+      error.message.includes(
+        'violates unique constraint "profiles_username_key"',
+      )
+    ) {
+      return 'Username ini sudah dipakai. Silakan pilih username lain.';
+    }
+    if (error.message.includes('row-level security policy')) {
+      return 'Kesalahan RLS. Pastikan policy INSERT di tabel profiles sudah benar.';
+    }
+    return error.message;
+  };
+
+  const hideModal = () => {
+    if (modalState.onClose) {
+      modalState.onClose();
+    }
+    setModalState({
+      isVisible: false,
+      title: '',
+      message: '',
+      modalType: 'error',
+      onClose: () => {},
+    });
+  };
+
+  const handleRegister = async () => {
+    // ... (Fungsi handleRegister tetap sama)
+    const trimmedEmail = email.trim();
+    const trimmedUsername = username.trim().toLowerCase();
+    const trimmedFullName = fullName.trim();
+    const trimmedPhoneNumber = phoneNumber.trim();
+    const trimmedPassword = password.trim();
+
+    if (
+      !trimmedEmail ||
+      !trimmedPassword ||
+      !trimmedFullName ||
+      !trimmedUsername ||
+      !trimmedPhoneNumber
+    ) {
+      setModalState({
+        isVisible: true,
+        title: 'Error Validasi',
+        message: 'Semua field wajib diisi.',
+        modalType: 'error',
+      });
       return;
     }
-    console.log('Register attempt:', {
-      email,
-      fullName,
-      gender,
-      phoneNumber,
-      password,
-    });
-    Alert.alert('Register Pressed', 'Account details logged.'); // Placeholder
-    // Jika sukses, mungkin navigasi ke Login
-    // navigation.navigate('Login');
+    if (trimmedPassword !== confirmPassword.trim()) {
+      setModalState({
+        isVisible: true,
+        title: 'Error Validasi',
+        message: 'Password dan Konfirmasi Password tidak cocok!',
+        modalType: 'error',
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password: trimmedPassword,
+        phone: trimmedPhoneNumber,
+        options: {
+          data: {
+            full_name: trimmedFullName,
+            username: trimmedUsername,
+          },
+        },
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error(
+          'Gagal membuat akun, user tidak ditemukan setelah daftar.',
+        );
+      }
+
+      setLoading(false);
+      setModalState({
+        isVisible: true,
+        title: 'Pendaftaran Berhasil!',
+        message:
+          'Akun Anda telah dibuat. Silakan cek email untuk konfirmasi sebelum login.',
+        modalType: 'success',
+        onClose: () => navigation.navigate('Login'),
+      });
+    } catch (error) {
+      setLoading(false);
+      const friendlyError = handleSupabaseError(error);
+      console.error('Error Registrasi:', error.message);
+      setModalState({
+        isVisible: true,
+        title: 'Pendaftaran Gagal',
+        message: friendlyError,
+        modalType: 'error',
+      });
+    }
   };
 
   const handlePrivacyPolicy = () => {
-    // --- TODO: Buka link Privacy Policy ---
     console.log('Open Privacy Policy');
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#4A2F2F" />{' '}
-      {/* Warna gelap */}
+      <StatusBar barStyle="light-content" backgroundColor="#4A2F2F" />
       <ScrollView contentContainerStyle={styles.scrollViewContainer}>
-        {/* === Bagian Atas (Kosong/Gelap) === */}
-        <View style={styles.topSection} />
+        {/* ... (Top Section, Form Title, Email, Full Name, Username, Phone Number tetap sama) ... */}
 
-        {/* === Bagian Form (Konten Putih) === */}
+        <View style={styles.topSection} />
         <View style={styles.formSection}>
           <Text style={styles.formTitle}>Sign Up Form</Text>
 
@@ -73,7 +187,6 @@ const RegisterScreen = ({ navigation }) => {
                   <PeopleIcon />
                 </View>
               )}
-
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email"
@@ -82,7 +195,7 @@ const RegisterScreen = ({ navigation }) => {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                onFocus={() => setIsEmailFocused(false)} // <-- Set state jadi true saat fokus
+                onFocus={() => setIsEmailFocused(false)}
                 onBlur={() => setIsEmailFocused(true)}
               />
             </View>
@@ -98,47 +211,23 @@ const RegisterScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={fullName}
                 onChangeText={setFullName}
-                autoCapitalize="words" // Kapitalisasi nama
+                autoCapitalize="words"
               />
             </View>
           </View>
 
-          {/* Gender */}
+          {/* Username */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Gender</Text>
-            <View style={styles.radioContainer}>
-              <TouchableOpacity
-                style={styles.radioButton}
-                onPress={() => setGender('Male')}
-              >
-                <View
-                  style={[
-                    styles.radioOuter,
-                    gender === 'Male' && styles.radioOuterSelected,
-                  ]}
-                >
-                  {gender === 'Male' && (
-                    <View style={styles.radioInnerSelected} />
-                  )}
-                </View>
-                <Text style={styles.radioLabel}>Male</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.radioButton}
-                onPress={() => setGender('Female')}
-              >
-                <View
-                  style={[
-                    styles.radioOuter,
-                    gender === 'Female' && styles.radioOuterSelected,
-                  ]}
-                >
-                  {gender === 'Female' && (
-                    <View style={styles.radioInnerSelected} />
-                  )}
-                </View>
-                <Text style={styles.radioLabel}>Female</Text>
-              </TouchableOpacity>
+            <Text style={styles.label}>Username</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your username (no spaces)"
+                placeholderTextColor="#999"
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+              />
             </View>
           </View>
 
@@ -152,11 +241,12 @@ const RegisterScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
-                keyboardType="phone-pad" // Keyboard nomor telepon
+                keyboardType="phone-pad"
               />
             </View>
           </View>
 
+          {/* --- MODIFIKASI PASSWORD DIMULAI DI SINI --- */}
           {/* Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
@@ -167,12 +257,23 @@ const RegisterScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!isPasswordVisible} // <<< 2. BUAT DINAMIS
+                autoCapitalize="none"
               />
-              {/* Ganti View ini dengan Image icon gembok */}
-              <View style={styles.iconPlaceholder}>
-                <LockIcon />
-              </View>
+              {/* <<< 3. GANTI LockIcon DENGAN TOMBOL MATA >>> */}
+              <TouchableOpacity
+                style={styles.iconPlaceholder}
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+              >
+                {/* Ganti dengan Ikon Mata SVG nanti. Ini placeholder: */}
+                <Text style={{ fontSize: 24, color: '#555' }}>
+                  {isPasswordVisible ? (
+                    <EyeClosedIcon width={24} height={24} />
+                  ) : (
+                    <EyeOpenIcon width={24} height={24} />
+                  )}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -186,20 +287,40 @@ const RegisterScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                secureTextEntry
+                secureTextEntry={!isConfirmPasswordVisible} // <<< 4. BUAT DINAMIS
+                autoCapitalize="none"
               />
-              <View style={styles.iconPlaceholder}>
-                <LockIcon />
-              </View>
+              {/* <<< 5. GANTI LockIcon DENGAN TOMBOL MATA >>> */}
+              <TouchableOpacity
+                style={styles.iconPlaceholder}
+                onPress={() =>
+                  setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
+                }
+              >
+                {/* Ganti dengan Ikon Mata SVG nanti. Ini placeholder: */}
+                <Text style={{ fontSize: 24, color: '#555' }}>
+                  {isPasswordVisible ? (
+                    <EyeClosedIcon width={24} height={24} />
+                  ) : (
+                    <EyeOpenIcon width={24} height={24} />
+                  )}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
           <TouchableOpacity
             style={styles.actionButton}
             onPress={handleRegister}
+            disabled={loading}
           >
-            <Text style={styles.actionButtonText}>Create Account</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.actionButtonText}>Create Account</Text>
+            )}
           </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={{ marginTop: 15 }}
@@ -209,7 +330,6 @@ const RegisterScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
 
-          {/* Link Privacy Policy */}
           <TouchableOpacity
             onPress={handlePrivacyPolicy}
             style={styles.privacyButton}
@@ -218,11 +338,18 @@ const RegisterScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <InfoModal
+        isVisible={modalState.isVisible}
+        title={modalState.title}
+        message={modalState.message}
+        modalType={modalState.modalType}
+        onClose={hideModal}
+      />
     </SafeAreaView>
   );
 };
 
-// --- STYLES (Contoh, silakan sesuaikan) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -230,11 +357,10 @@ const styles = StyleSheet.create({
   },
   scrollViewContainer: {
     flexGrow: 1,
-    backgroundColor: '#4A2F2F', // Warna background gelap
+    backgroundColor: '#4A2F2F',
   },
   topSection: {
-    height: 100, // Sesuaikan tinggi area gelap atas
-    // backgroundColor: '#4A2F2F', // Sudah di scrollViewContainer
+    height: 100,
   },
   formSection: {
     flex: 1,
@@ -243,7 +369,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingHorizontal: 30,
     paddingTop: 30,
-    paddingBottom: 40, // Beri ruang di bawah
+    paddingBottom: 40,
   },
   formTitle: {
     fontSize: 24,
@@ -251,95 +377,58 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     marginBottom: 30,
-    // fontFamily: 'YourFont-Bold',
   },
   inputGroup: {
-    marginBottom: 15, // Jarak antar grup input
+    marginBottom: 15,
   },
   label: {
     fontSize: 14,
     color: '#555',
     marginBottom: 8,
-    // fontFamily: 'YourFont-Regular',
   },
   inputContainer: {
-    // Container untuk input + ikon
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
     borderWidth: 1,
     borderColor: '#DDD',
-    borderRadius: 15, // Sudut melengkung
+    borderRadius: 15,
   },
   input: {
-    flex: 1, // Agar input mengisi ruang
+    flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 15,
     fontSize: 16,
     color: '#333',
-    borderWidth: 0, // Border sudah di container
-    // fontFamily: 'YourFont-Regular',
+    borderWidth: 0,
   },
   iconPlaceholder: {
-    paddingHorizontal: 10,
-  },
-
-  radioContainer: {
-    flexDirection: 'row',
+    paddingHorizontal: 12, // Beri padding yg sama di kiri/kanan
+    minWidth: 40, // Samakan lebar minimum
     alignItems: 'center',
-    marginTop: 5,
-  },
-  radioButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 30, // Jarak antar pilihan gender
-  },
-  radioOuter: {
-    height: 20,
-    width: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#AAA', // Warna border radio button
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  radioOuterSelected: {
-    borderColor: '#6D4C41', // Warna border saat dipilih (coklat tua)
-  },
-  radioInnerSelected: {
-    height: 10,
-    width: 10,
-    borderRadius: 5,
-    backgroundColor: '#6D4C41', // Warna titik tengah saat dipilih
-  },
-  radioLabel: {
-    fontSize: 16,
-    color: '#333',
-    // fontFamily: 'YourFont-Regular',
   },
   actionButton: {
-    backgroundColor: '#7D5A5A', // Warna tombol (estimasi)
+    backgroundColor: '#7D5A5A',
     paddingVertical: 16,
     borderRadius: 15,
     alignItems: 'center',
-    marginTop: 25, // Jarak dari input terakhir
+    marginTop: 25,
     elevation: 3,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-    // fontFamily: 'YourFont-Bold',
   },
   privacyButton: {
-    marginTop: 20, // Jarak dari tombol utama
+    marginTop: 20,
   },
   privacyText: {
     color: '#888',
     fontSize: 12,
     textAlign: 'center',
-    // fontFamily: 'YourFont-Regular',
   },
 });
 

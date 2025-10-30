@@ -1,52 +1,40 @@
 // src/components/common/LeaderboardModal.js
-import React from 'react';
-import { View, Text, StyleSheet, Image, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  FlatList,
+  ActivityIndicator, // <<< 1. Import
+} from 'react-native';
 import Modal from 'react-native-modal';
+import { supabase } from '../../services/supabaseClient'; // <<< 2. Import Supabase
 
-// --- Data Dummy Leaderboard ---
-const leaderboardData = [
-  {
-    id: '1',
-    name: 'Marsha Fisher',
-    score: 36,
-    image: 'https://via.placeholder.com/40/FFC107/333?text=MF',
-  },
-  {
-    id: '2',
-    name: 'Juanita Cormier',
-    score: 35,
-    image: 'https://via.placeholder.com/40/EEEEEE/333?text=JC',
-  },
-  {
-    id: '3',
-    name: 'You',
-    score: 34,
-    image: 'https://via.placeholder.com/40/C8E6C9/333?text=YOU',
-    isUser: true,
-  }, // Tandai user
-  {
-    id: '4',
-    name: 'Tamara Schmidt',
-    score: 33,
-    image: 'https://via.placeholder.com/40/EEEEEE/333?text=TS',
-  },
-  {
-    id: '5',
-    name: 'Ricardo Veum',
-    score: 32,
-    image: 'https://via.placeholder.com/40/EEEEEE/333?text=RV',
-  },
-];
+// --- Hapus Data Dummy Leaderboard ---
+// const leaderboardData = [ ... ];
 
-// Komponen untuk satu baris leaderboard
+// Komponen untuk satu baris leaderboard (Tetap sama)
 const LeaderboardItem = ({ item, rank }) => (
   <View style={[styles.itemContainer, item.isUser && styles.userItemContainer]}>
     <Text style={[styles.itemRank, item.isUser && styles.userItemText]}>
       {rank}
     </Text>
-    <Image source={{ uri: item.image }} style={styles.itemImage} />
+    {/* <<< 3. Gunakan avatar_url dari profiles >>> */}
+    <Image
+      source={
+        item.profiles.avatar_url
+          ? { uri: item.profiles.avatar_url }
+          : // Placeholder jika avatar_url null
+            {
+              uri: `https://via.placeholder.com/40/EEEEEE/333?text=${item.profiles.username[0]}`,
+            }
+      }
+      style={styles.itemImage}
+    />
     <Text style={[styles.itemName, item.isUser && styles.userItemText]}>
-      {item.name}
+      {/* <<< 4. Tampilkan 'You' jika ID-nya milik kita >>> */}
+      {item.isUser ? 'You' : item.profiles.username}
     </Text>
     <Text style={[styles.itemScore, item.isUser && styles.userItemText]}>
       {item.score} pts
@@ -54,7 +42,78 @@ const LeaderboardItem = ({ item, rank }) => (
   </View>
 );
 
-const LeaderboardModal = ({ isVisible, onClose }) => {
+// <<< 5. Terima 'quizId' sebagai prop >>>
+const LeaderboardModal = ({ isVisible, onClose, quizId }) => {
+  // --- 6. Tambahkan State ---
+  const [loading, setLoading] = useState(true);
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  // --- 7. Fungsi Fetch Leaderboard ---
+  const fetchLeaderboard = async () => {
+    if (!quizId) return; // Jangan fetch jika tidak ada quizId
+
+    setLoading(true);
+    try {
+      // 1. Ambil ID user yang sedang login
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+
+      // 2. Ambil data leaderboard
+      // - Ambil dari 'quiz_attempts'
+      // - Filter berdasarkan 'quiz_id'
+      // - Urutkan dari 'score' tertinggi
+      // - Ambil data 'username' & 'avatar_url' dari tabel 'profiles'
+      // - Batasi 10 besar
+      const { data, error } = await supabase
+        .from('quiz_attempts')
+        .select(
+          `
+          user_id,
+          score,
+          profiles (
+            username,
+            avatar_url
+          )
+        `,
+        )
+        .eq('quiz_id', quizId) // Filter kuis yang ini saja
+        .order('score', { ascending: false }) // Urutkan skor tertinggi
+        .limit(10); // Ambil 10 besar
+
+      if (error) throw error;
+
+      // 3. Format data untuk menandai user
+      const formattedData = data
+        // Filter data yang profilnya tidak sengaja null
+        .filter(item => item.profiles)
+        .map(item => ({
+          ...item,
+          id: item.user_id, // Gunakan user_id sebagai ID unik
+          isUser: item.user_id === user?.id, // Tandai jika ini adalah user kita
+        }));
+
+      setLeaderboardData(formattedData);
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error.message);
+      // Gagal fetch, set data kosong
+      setLeaderboardData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- 8. Panggil fetchLeaderboard saat modal terlihat ---
+  useEffect(() => {
+    if (isVisible) {
+      fetchLeaderboard();
+    }
+  }, [isVisible, quizId]); // Jalankan ulang jika quizId atau visibility berubah
+
   return (
     <Modal
       isVisible={isVisible}
@@ -67,22 +126,35 @@ const LeaderboardModal = ({ isVisible, onClose }) => {
       backdropTransitionOutTiming={0}
     >
       <View style={styles.contentContainer}>
-        {/* Handle */}
         <View style={styles.handle} />
-        {/* Render List */}
-        <FlatList
-          data={leaderboardData}
-          renderItem={({ item, index }) => (
-            <LeaderboardItem item={item} rank={index + 1} />
-          )}
-          keyExtractor={item => item.id}
-          style={styles.list}
-        />
+
+        {/* --- 9. Tampilkan Loading atau List --- */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#6A453C" />
+          </View>
+        ) : (
+          <FlatList
+            data={leaderboardData}
+            renderItem={({ item, index }) => (
+              <LeaderboardItem item={item} rank={index + 1} />
+            )}
+            keyExtractor={item => item.id}
+            style={styles.list}
+            ListHeaderComponent={
+              <Text style={styles.title}>Peringkat Kuis Ini</Text>
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>Belum ada peringkat.</Text>
+            }
+          />
+        )}
       </View>
     </Modal>
   );
 };
 
+// --- STYLES (Tambahkan style loading, title, empty) ---
 const styles = StyleSheet.create({
   modal: {
     justifyContent: 'flex-end',
@@ -91,11 +163,12 @@ const styles = StyleSheet.create({
   contentContainer: {
     backgroundColor: 'white',
     paddingTop: 10,
-    paddingBottom: 20, // Beri jarak di bawah
+    paddingBottom: 20,
     paddingHorizontal: 15,
     borderTopRightRadius: 25,
     borderTopLeftRadius: 25,
-    maxHeight: '60%', // Batasi tinggi modal
+    maxHeight: '60%',
+    minHeight: '40%', // Beri tinggi minimum
   },
   handle: {
     width: 40,
@@ -105,8 +178,28 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     alignSelf: 'center',
   },
+  title: {
+    // Judul di atas list
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  loadingContainer: {
+    // Style loading
+    paddingVertical: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   list: {
     // Style untuk FlatList jika perlu
+  },
+  emptyText: {
+    // Style jika data kosong
+    textAlign: 'center',
+    color: '#888',
+    marginTop: 20,
   },
   itemContainer: {
     flexDirection: 'row',
@@ -119,24 +212,24 @@ const styles = StyleSheet.create({
     borderColor: '#EEE',
   },
   userItemContainer: {
-    // Style khusus untuk user
-    backgroundColor: '#E3D5B8', // Coklat muda (estimasi)
+    backgroundColor: '#E3D5B8',
     borderColor: '#E3D5B8',
   },
   itemRank: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#AAA',
-    width: 30, // Beri lebar tetap
+    width: 30,
   },
   itemImage: {
     width: 40,
     height: 40,
     borderRadius: 20,
     marginRight: 10,
+    backgroundColor: '#EEE', // Placeholder background
   },
   itemName: {
-    flex: 1, // Ambil sisa ruang
+    flex: 1,
     fontSize: 15,
     fontWeight: '500',
     color: '#333',
@@ -147,8 +240,7 @@ const styles = StyleSheet.create({
     color: '#555',
   },
   userItemText: {
-    // Style teks khusus untuk user
-    color: '#6A453C', // Coklat tua
+    color: '#6A453C',
   },
 });
 

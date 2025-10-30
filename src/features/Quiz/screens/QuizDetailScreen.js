@@ -11,16 +11,20 @@ import {
 
 const QuizDetailScreen = ({ route, navigation }) => {
   // Ambil data kuis lengkap yang dikirim dari QuizListScreen
-  // Kita asumsikan 'quizItem' berisi { id, title, questionCount, duration, ... }
   const { quizItem } = route.params;
 
   // Fungsi untuk memulai kuis, kirim quizId ke layar soal
   const handleStartQuiz = () => {
-    navigation.navigate('QuizScreen', { quizId: quizItem.id });
+    // Kirim ID kuis (angka) dan juga Judulnya
+    navigation.navigate('QuizScreen', {
+      quizId: quizItem.id,
+      quizTitle: quizItem.title,
+    });
   };
 
-  // Ambil nomor kuis dari ID (misal 'quiz4' -> '4')
-  const quizNumber = quizItem.id.replace(/\D/g, '') || 'N/A'; // Ambil angkanya saja
+  // <<< PENYESUAIAN KECIL: Tampilkan ID aslinya saja >>>
+  // const quizNumber = quizItem.id.replace(/\D/g, '') || 'N/A';
+  const quizNumber = quizItem.id; // Lebih simpel dan jelas
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -33,7 +37,6 @@ const QuizDetailScreen = ({ route, navigation }) => {
           style={styles.backButton}
         >
           <Text style={styles.backButtonText}>{'<'}</Text>
-          {/* Ganti dengan Ikon Panah SVG/Image */}
         </TouchableOpacity>
       </View>
 
@@ -52,7 +55,9 @@ const QuizDetailScreen = ({ route, navigation }) => {
 
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Waktu Pengerjaan</Text>
-            <Text style={styles.infoValue}>{quizItem.duration}</Text>
+            <Text style={styles.infoValue}>
+              {quizItem.duration || 'Tidak terbatas'}
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -67,7 +72,7 @@ const QuizDetailScreen = ({ route, navigation }) => {
   );
 };
 
-// --- STYLES ---
+// --- STYLES (Tetap sama) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -105,17 +110,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#AAA',
     marginBottom: 5,
-    // fontFamily: 'YourFont-Regular',
   },
   quizTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 25,
-    // fontFamily: 'YourFont-Bold',
+    textAlign: 'center', // Pastikan judul di tengah
   },
   infoRow: {
-    alignItems: 'center', // Pusatkan teks di baris
+    alignItems: 'center',
     marginBottom: 15,
   },
   infoLabel: {
@@ -128,11 +132,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   startButton: {
-    backgroundColor: '#7D5A5A', // Warna tombol coklat (estimasi)
+    backgroundColor: '#7D5A5A',
     paddingVertical: 16,
     paddingHorizontal: 50,
     borderRadius: 30,
-    marginTop: 20, // Jarak dari info terakhir
+    marginTop: 20,
     elevation: 3,
   },
   startButtonText: {

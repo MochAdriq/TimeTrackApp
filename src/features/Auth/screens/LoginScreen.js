@@ -1,6 +1,6 @@
 // src/features/Auth/screens/LoginScreen.js
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react'; // <<< 1. IMPORT useRef
 import {
   View,
   Text,
@@ -9,22 +9,102 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  Image, // Untuk logo dan ikon sosial
-  ScrollView, // Jika kontennya bisa panjang di layar kecil
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
+
 import TimeTrackNameWhite from '../../../assets/images/TimeTrackNameWhite.svg';
 import TimeTrackLogo from '../../../assets/images/TimeTrackLogo.svg';
 import GoogleLogo from '../../../assets/images/GoogleLogo.svg';
 import InstagramLogo from '../../../assets/images/InstagramLogo.svg';
 import MetaverseLogo from '../../../assets/images/MetaverseLogo.svg';
-import LockIcon from '../../../assets/images/lockIcon.svg';
+
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
+
+import EyeOpenIcon from '../../../assets/icon/EyeOpenIcon.svg';
+import EyeClosedIcon from '../../../assets/icon/EyeClosedIcon.svg';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [modalState, setModalState] = useState({
+    isVisible: false,
+    title: '',
+    message: '',
+    modalType: 'error',
+  });
 
-  const handleLogin = () => {
-    console.log('Login attempt:', email, password);
+  // <<< 2. BUAT REF UNTUK INPUT PASSWORD >>>
+  const passwordInputRef = useRef(null);
+
+  const handleSupabaseError = error => {
+    // ... (Fungsi ini tetap sama)
+    if (error.message.includes('Invalid login credentials')) {
+      return 'Email atau password yang Anda masukkan salah.';
+    }
+    if (error.message.includes('Email not confirmed')) {
+      return 'Email Anda belum dikonfirmasi. Silakan cek inbox email Anda.';
+    }
+    return error.message;
+  };
+
+  const hideModal = () => {
+    setModalState({
+      isVisible: false,
+      title: '',
+      message: '',
+      modalType: 'error',
+    });
+  };
+
+  const handleLogin = async () => {
+    // ... (Fungsi ini tetap sama)
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      setModalState({
+        isVisible: true,
+        title: 'Error',
+        message: 'Email dan Password wajib diisi.',
+        modalType: 'error',
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password: trimmedPassword,
+      });
+
+      if (error) {
+        throw error; // Lempar ke catch block
+      }
+
+      if (data.session) {
+        console.log('Login Berhasil, session:', data.session.user.email);
+        setLoading(false);
+        // Navigasi akan di-handle oleh App.tsx
+      } else {
+        throw new Error('Login berhasil namun tidak mendapatkan session.');
+      }
+    } catch (error) {
+      setLoading(false);
+      const friendlyError = handleSupabaseError(error);
+      console.error('Error Login:', error.message);
+      setModalState({
+        isVisible: true,
+        title: 'Login Gagal',
+        message: friendlyError,
+        modalType: 'error',
+      });
+    }
   };
 
   const navigateToRegister = () => {
@@ -33,31 +113,28 @@ const LoginScreen = ({ navigation }) => {
 
   const handleSocialLogin = provider => {
     console.log(`Login with ${provider}`);
+    setModalState({
+      isVisible: true,
+      title: 'Fitur Belum Tersedia',
+      message: 'Login dengan media sosial sedang dalam pengembangan.',
+      modalType: 'error',
+    });
   };
 
   const handlePrivacyPolicy = () => {
     console.log('Open Privacy Policy');
   };
 
-  const handleSkipLogin = () => {
-    console.log('Skipping login...');
-    navigation.replace('MainApp'); // Pastikan 'HomeScreen' ada di AppNavigator
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#4A2F2F" />{' '}
-      <ScrollView contentContainerStyle={styles.scrollViewContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#4A2F2F" />
+      <ScrollView
+        contentContainerStyle={styles.scrollViewContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.topSection}>
-          <TimeTrackLogo
-            width={71.6} // Sesuaikan lebar logo
-            height={71.6}
-          />
-          <TimeTrackNameWhite
-            width={200} // Sesuaikan lebar teks SVG
-            height={40} // Sesuaikan tinggi teks SVG
-            style={styles.appName} // Terapkan margin bawah
-          />
+          <TimeTrackLogo width={71.6} height={71.6} />
+          <TimeTrackNameWhite width={200} height={40} style={styles.appName} />
         </View>
 
         <View style={styles.formSection}>
@@ -71,6 +148,9 @@ const LoginScreen = ({ navigation }) => {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              returnKeyType="next"
+              // <<< 3. GUNAKAN REF.CURRENT.FOCUS() >>>
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
             />
           </View>
 
@@ -78,22 +158,44 @@ const LoginScreen = ({ navigation }) => {
             <Text style={styles.label}>Password</Text>
             <View style={styles.passwordInputContainer}>
               <TextInput
-                style={[styles.input, styles.passwordInput]} // Buat style terpisah jika perlu
+                // <<< 4. PASANG REF DI SINI >>>
+                ref={passwordInputRef}
+                style={[styles.input, styles.passwordInput]}
                 placeholder="Enter your Password"
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry // Sembunyikan password
+                secureTextEntry={!isPasswordVisible}
+                autoCapitalize="none"
+                returnKeyType="go"
+                onSubmitEditing={handleLogin}
               />
-              <View style={styles.LockIconStyle}>
-                <LockIcon />
-              </View>
+              <TouchableOpacity
+                style={styles.LockIconStyle}
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+              >
+                <Text style={{ fontSize: 24, color: '#555' }}>
+                  {isPasswordVisible ? (
+                    <EyeClosedIcon width={24} height={24} />
+                  ) : (
+                    <EyeOpenIcon width={24} height={24} />
+                  )}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
           {/* Tombol Login */}
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Login</Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.loginButtonText}>Login</Text>
+            )}
           </TouchableOpacity>
 
           {/* Link Create Account */}
@@ -102,10 +204,7 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.skipButton} onPress={handleSkipLogin}>
-          <Text style={styles.skipButtonText}>Skip Login (Dev)</Text>
-        </TouchableOpacity>
-
+        {/* Bottom Section */}
         <View style={styles.bottomSection}>
           <View style={styles.socialLoginContainer}>
             <TouchableOpacity
@@ -132,31 +231,44 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Modal */}
+      <InfoModal
+        isVisible={modalState.isVisible}
+        title={modalState.title}
+        message={modalState.message}
+        modalType={modalState.modalType}
+        onClose={hideModal}
+      />
     </SafeAreaView>
   );
 };
 
+// --- STYLES (Tetap sama) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff', // Warna default jika ada area kosong
+    backgroundColor: '#fff',
   },
   scrollViewContainer: {
-    flexGrow: 1, // Agar bisa scroll jika konten panjang
-    backgroundColor: '#6A453C', // Warna background gelap bagian atas
+    flexGrow: 1,
+    backgroundColor: '#6A453C',
   },
   topSection: {
-    height: 200, // Sesuaikan tinggi area logo
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  appName: {
+    marginTop: 10,
+  },
   formSection: {
-    flex: 1, // Agar mengisi sisa ruang
-    backgroundColor: '#FFFFFF', // Background putih
-    borderTopLeftRadius: 45, // Sudut melengkung atas
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 45,
     borderTopRightRadius: 45,
     paddingHorizontal: 30,
-    paddingTop: 40, // Padding di dalam area putih
+    paddingTop: 40,
   },
   inputGroup: {
     marginBottom: 20,
@@ -165,18 +277,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#555',
     marginBottom: 8,
-    // fontFamily: 'YourFont-Regular',
   },
   input: {
     backgroundColor: '#FFF',
     borderWidth: 1,
     borderColor: '#DDD',
-    borderRadius: 15, // Sudut input melengkung
+    borderRadius: 15,
     paddingVertical: 12,
     paddingHorizontal: 15,
     fontSize: 16,
     color: '#000',
-    // fontFamily: 'YourFont-Regular',
   },
   passwordInputContainer: {
     flexDirection: 'row',
@@ -187,52 +297,42 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   passwordInput: {
-    flex: 1, // Agar input mengisi ruang
-    borderWidth: 0, // Hapus border individual karena sudah ada di container
+    flex: 1,
+    borderWidth: 0,
   },
   LockIconStyle: {
-    marginRight: 15,
+    paddingHorizontal: 12,
+    minWidth: 40,
+    alignItems: 'center',
+    marginRight: 3,
   },
   loginButton: {
-    backgroundColor: '#6A453C', // Warna tombol login (estimasi)
+    backgroundColor: '#6A453C',
     paddingVertical: 16,
     borderRadius: 15,
     alignItems: 'center',
-    marginTop: 10, // Jarak dari input terakhir
-    marginBottom: 20, // Jarak ke link create account
+    marginTop: 10,
+    marginBottom: 20,
     elevation: 3,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-    // fontFamily: 'YourFont-Bold',
   },
   createAccountText: {
-    color: '#4A2F2F', // Warna link (estimasi)
+    color: '#4A2F2F',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 20,
-    // fontFamily: 'YourFont-SemiBold',
-  },
-  skipButton: {
-    // Style untuk tombol skip
-    marginTop: 10,
-    paddingVertical: 10,
-    // backgroundColor: '#EEE', // Warna berbeda (opsional)
-    // borderRadius: 15,
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    // Style teks tombol skip
-    color: '#888', // Warna abu-abu
-    fontSize: 12,
   },
   bottomSection: {
-    paddingBottom: 30, // Padding di bawah area putih
+    paddingBottom: 30,
     paddingTop: 20,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF', // Lanjutkan background putih
+    backgroundColor: '#FFFFFF',
   },
   socialLoginContainer: {
     flexDirection: 'row',
@@ -249,7 +349,6 @@ const styles = StyleSheet.create({
   privacyText: {
     color: '#888',
     fontSize: 12,
-    // fontFamily: 'YourFont-Regular',
   },
 });
 

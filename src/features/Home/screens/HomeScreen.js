@@ -1,6 +1,9 @@
 // src/features/Home/screens/HomeScreen.js
 
-import React from 'react';
+import React, {
+  useState,
+  useEffect, // <<< Pastikan useEffect di-import dari 'react'
+} from 'react';
 import {
   StyleSheet,
   SafeAreaView,
@@ -8,132 +11,135 @@ import {
   ScrollView,
   View,
   Text,
+  Alert, // <<< Tambahkan Alert untuk error
 } from 'react-native';
-import {
-  useState, // <<< Import useState
-} from 'react';
 
-import Header from '../components/Header'; // <-- Pastikan path ini benar
+import Header from '../components/Header';
 import SearchBar from '../components/SearchBar';
 import QuickActions from '../components/QuickActions';
 import SectionHeader from '../../../components/common/SectionHeader';
 import HorizontalCardList from '../../../components/common/HorizontalCardList';
+import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentModal';
 
-import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentModal'; // Import modal
-
-const sejarahData = [
-  {
-    id: 'sej1',
-    title: 'Kerajaan Islam',
-    subtitle: 'Perkembangan kerajaan...',
-    imageUrl:
-      'https://via.placeholder.com/300x400/A77C55/FFFFFF?text=Sejarah+1',
-  },
-  {
-    id: 'sej2',
-    title: 'Masa Penjajahan Barat',
-    subtitle: 'Masuknya Portugis, Bel...',
-    imageUrl:
-      'https://via.placeholder.com/300x400/8B5E3C/FFFFFF?text=Sejarah+2',
-  },
-  {
-    id: 'sej3',
-    title: 'Perang Kemerdekaan',
-    subtitle: 'Perjuangan melawan...',
-    imageUrl:
-      'https://via.placeholder.com/300x400/6A453C/FFFFFF?text=Sejarah+3',
-  },
-  // Tambah item lain jika perlu
-];
-
-const budayaData = [
-  {
-    id: 'bud1',
-    title: 'Wayang Kulit',
-    subtitle: 'Seni pertunjukan Jawa',
-    imageUrl: 'https://via.placeholder.com/300x400/E3D5B8/333333?text=Budaya+1',
-  },
-  {
-    id: 'bud2',
-    title: 'Tari Saman',
-    subtitle: 'Tarian dari Aceh',
-    imageUrl: 'https://via.placeholder.com/300x400/FAF3E0/333333?text=Budaya+2',
-  },
-  {
-    id: 'bud3',
-    title: 'Rumah Gadang',
-    subtitle: 'Arsitektur Minangkabau',
-    imageUrl: 'https://via.placeholder.com/300x400/D4B895/333333?text=Budaya+3',
-  },
-  // Tambah item lain jika perlu
-];
+// --- 1. IMPORT SUPABASE ---
+import { supabase } from '../../../services/supabaseClient';
 
 const HomeScreen = ({ navigation }) => {
-  const userName = 'Alka Azzahra';
-  const userLevel = 1;
-  const userPoints = 100000;
+  // --- 2. UBAH STATE DEFAULT ---
+  const [userName, setUserName] = useState('Memuat...'); // <<< Ganti jadi default loading
+  const [userLevel, setUserLevel] = useState(0); // <<< Ganti jadi default loading
+  const [userPoints, setUserPoints] = useState(0); // <<< Ganti jadi default loading
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [isModalVisible, setModalVisible] = useState(false);
 
+  const [materiData, setMateriData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // --- 3. MODIFIKASI FUNGSI FETCH DATA ---
+  useEffect(() => {
+    // Buat fungsi async di dalam useEffect
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // --- A. AMBIL DATA USER YANG SEDANG LOGIN ---
+        // (Kita tahu ini ada karena App.tsx sudah memastikan session ada)
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError) throw new Error(`User Error: ${userError.message}`);
+        if (!user) throw new Error('User tidak ditemukan (session null)');
+
+        // --- B. AMBIL DATA DARI TABEL PROFILES & MATERI ---
+        // Kita jalankan keduanya sekaligus
+        const [profileResult, materiResult] = await Promise.all([
+          // Query 1: Ambil profile
+          supabase
+            .from('profiles')
+            .select('username, level, points')
+            .eq('id', user.id)
+            .single(),
+          // Query 2: Ambil materi
+          supabase.from('materi').select('*').limit(10),
+        ]);
+
+        // --- C. PROSES DATA PROFIL ---
+        if (profileResult.error) {
+          throw new Error(`Profile Error: ${profileResult.error.message}`);
+        }
+        if (profileResult.data) {
+          setUserName(profileResult.data.username);
+          setUserLevel(profileResult.data.level || 1); // Set 1 jika level null
+          setUserPoints(profileResult.data.points || 0);
+        }
+
+        // --- D. PROSES DATA MATERI ---
+        if (materiResult.error) {
+          throw new Error(`Materi Error: ${materiResult.error.message}`);
+        }
+        if (materiResult.data) {
+          const formattedData = materiResult.data.map(item => ({
+            ...item,
+            imageUrl: item.image_url,
+          }));
+          setMateriData(formattedData);
+        }
+      } catch (error) {
+        console.error('Error fetching data HomeScreen:', error.message);
+        Alert.alert('Gagal Memuat Data', error.message);
+      } finally {
+        setLoading(false); // Apapun yang terjadi, stop loading
+      }
+    };
+
+    fetchData(); // Panggil fungsi saat komponen dimuat
+  }, []); // [] = Jalankan sekali saat load
+
+  // --- Sisa fungsi (layout, modal, navigasi) biarkan sama ---
   const handleSeeAllSejarah = () => console.log('Lihat Semua Sejarah');
   const handleSeeAllBudaya = () => console.log('Lihat Semua Budaya');
-  const [headerHeight, setHeaderHeight] = useState(0);
 
-  // Fungsi yang akan dijalankan saat Header selesai layout
   const onHeaderLayout = event => {
     const { height } = event.nativeEvent.layout;
     if (height > 0 && height !== headerHeight) {
-      // Update hanya jika ada perubahan & > 0
       setHeaderHeight(height);
     }
   };
 
-  // Hitung posisi top SearchBar HANYA JIKA headerHeight sudah terukur (> 0)
-  const searchBarTopPosition = headerHeight > 0 ? headerHeight - 60 / 2 : -999; // Sembunyikan dulu
-
-  const [isModalVisible, setModalVisible] = useState(false); // State untuk kontrol modal
-
-  // Fungsi untuk membuka modal
-  const openModal = () => {
-    setModalVisible(true);
-  };
-
-  // Fungsi untuk menutup modal
-  const closeModal = () => {
-    setModalVisible(false);
-  };
+  const searchBarTopPosition = headerHeight > 0 ? headerHeight - 60 / 2 : -999;
+  const openModal = () => setModalVisible(true);
+  const closeModal = () => setModalVisible(false);
 
   const handleQuickAction = actionId => {
-    // --- TAMBAHKAN LOG DI SINI ---
-    console.log('HomeScreen received action:', actionId); // <<< Log Verifikasi
-
+    console.log('HomeScreen received action:', actionId);
     if (actionId === 'peta') {
-      console.log('Opening modal from HomeScreen...'); // <<< Log Verifikasi
       openModal();
     } else if (actionId === 'quiz') {
-      navigation.navigate('QuizList'); // <<< Ganti ke 'QuizList'
-      return;
+      navigation.navigate('QuizList');
     } else if (actionId === 'market') {
       navigation.navigate('MarketPlace');
     } else if (actionId === 'diskusi') {
-      openModal(); // Buka juga untuk diskusi?
+      navigation.navigate('DiscussionChoice');
     } else {
       console.log('Navigate to feature:', actionId);
     }
   };
 
   return (
-    // SafeAreaView background putih
     <SafeAreaView style={styles.safeArea}>
       <StatusBar
         barStyle="light-content"
         backgroundColor="#4A2F2F"
         translucent={false}
       />
+      {/* --- 4. HEADER SEKARANG DINAMIS --- */}
       <Header
         userName={userName}
         level={userLevel}
         points={userPoints}
         onNotificationPress={() => navigation.navigate('Notifications')}
         onLayout={onHeaderLayout}
+        navigation={navigation} // <<< Pastikan 'navigation' dikirim ke Header jika Header punya tombol Logout/Drawer
       />
 
       {headerHeight > 0 && (
@@ -152,59 +158,76 @@ const HomeScreen = ({ navigation }) => {
       >
         <QuickActions onActionPress={handleQuickAction} />
 
-        {/* === Section: Sejarah Indonesia === */}
         <SectionHeader
-          title="Sejarah Indonesia"
+          title="Materi Populer"
           onSeeAllPress={handleSeeAllSejarah}
         />
-        {/* Nanti di bawah sini kita taruh Horizontal List Sejarah */}
-        <HorizontalCardList data={sejarahData} />
+
+        {/* Logika Loading (Tetap sama) */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Memuat...</Text>
+          </View>
+        ) : (
+          <HorizontalCardList
+            data={materiData} // Data dari state
+            onCardPress={item =>
+              navigation.navigate('MateriDetail', { materiId: item.id })
+            }
+          />
+        )}
 
         <SectionHeader
           title="Kebudayaan Daerah"
           onSeeAllPress={handleSeeAllBudaya}
         />
-        <HorizontalCardList data={budayaData} />
+        <HorizontalCardList
+          data={[]} // Kosongkan dulu
+          onCardPress={item =>
+            navigation.navigate('MateriDetail', { materiId: item.id })
+          }
+        />
       </ScrollView>
       <UnderDevelopmentModal isVisible={isModalVisible} onClose={closeModal} />
     </SafeAreaView>
   );
 };
 
+// --- STYLES (Tetap sama) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // <<< Background utama PUTIH
+    backgroundColor: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // <<< ScrollView background PUTIH
+    backgroundColor: '#FFFFFF',
   },
   scrollViewContent: {
-    paddingBottom: 20, // Padding bawah saja
+    paddingBottom: 20,
     paddingTop: 20,
   },
-  placeholder: {
-    height: 60,
-    backgroundColor: '#E0E0E0',
-    marginHorizontal: 15,
-    marginTop: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-
   searchBarContainer: {
     position: 'absolute',
-    top: 130,
+    top: 130, // Sesuaikan angka ini jika header berubah tinggi
     left: 0,
     right: 0,
-    zIndex: 10, // Pastikan di atas Header (zIndex 1) dan ScrollView (default 0)
+    zIndex: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 1000, height: 1000 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 1000,
+    shadowRadius: 4,
     elevation: 4,
+  },
+  loadingContainer: {
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#888',
+    fontStyle: 'italic',
   },
 });
 
