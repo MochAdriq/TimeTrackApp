@@ -1,5 +1,5 @@
 // src/features/Discussion/screens/AskExpertListScreen.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,56 +7,82 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
-  FlatList, // Gunakan FlatList untuk daftar
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 
-// Impor komponen item list
 import ChatListItem from '../components/ChatListItem';
-
-// --- Data Dummy (Ganti dengan data asli dari API/Supabase nanti) ---
-const dummyExpertChats = [
-  {
-    id: 'expert1',
-    name: 'Prof. Budi Sejarawan',
-    lastMessage: 'Baik, akan saya jelaskan mengenai...',
-    time: '10:05',
-    avatarUrl: 'https://via.placeholder.com/50/8B5E3C/FFFFFF?text=BS',
-  },
-  {
-    id: 'expert2',
-    name: 'Dr. Siti Arkeolog',
-    lastMessage: 'Penemuan terbaru menunjukkan...',
-    time: 'Kemarin',
-    avatarUrl: 'https://via.placeholder.com/50/6A453C/FFFFFF?text=SA',
-  },
-  {
-    id: 'expert3',
-    name: 'Tim Ahli TimeTrack', // Contoh chat grup ahli
-    lastMessage: 'Silakan ajukan pertanyaan Anda di sini.',
-    time: '2 hari lalu',
-    avatarUrl: 'https://via.placeholder.com/50/E3D5B8/6A453C?text=TA',
-  },
-  // Tambahkan chat lain atau daftar ahli jika belum ada chat
-];
-// ------------------------------------------------------------------
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
 
 const AskExpertListScreen = ({ navigation }) => {
+  const [chatList, setChatList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  const showError = (title, message) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalVisible(true);
+  };
+
+  const fetchExpertList = async () => {
+    setLoading(true);
+    try {
+      // <<< INI KUNCI-nya >>>
+      // Sekarang query ini akan berhasil karena kolom 'type' sudah ada
+      const { data, error } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .eq('type', 'expert') // <<< Filter hanya untuk 'expert'
+        .order('last_message_time', { ascending: false, nullsFirst: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setChatList(data || []);
+    } catch (error) {
+      showError('Gagal Memuat Daftar Ahli', error.message);
+      setChatList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Ambil data saat fokus ke layar (agar bisa refresh saat kembali)
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchExpertList();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const handleChatItemPress = chatItem => {
-    console.log('Buka chat dengan:', chatItem.name);
-    // <<< UBAH NAVIGASI DI SINI >>>
     navigation.navigate('ChatScreen', {
       chatId: chatItem.id,
-      chatName: chatItem.name,
-      chatAvatarUrl: chatItem.avatarUrl, // Kirim URL avatar juga
+      chatName: chatItem.title,
+      chatAvatarUrl: chatItem.avatar_url,
     });
   };
 
+  // --- Sesuaikan renderItem ---
   const renderItem = ({ item }) => (
     <ChatListItem
-      name={item.name}
-      lastMessage={item.lastMessage}
-      time={item.time}
-      avatarUrl={item.avatarUrl}
+      name={item.title}
+      lastMessage={item.last_message || item.description || '...'}
+      // Format waktu (opsional, tapi lebih baik)
+      time={
+        item.last_message_time
+          ? new Date(item.last_message_time).toLocaleTimeString('id-ID', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : ''
+      }
+      avatarUrl={item.avatar_url}
       onPress={() => handleChatItemPress(item)}
     />
   );
@@ -74,27 +100,42 @@ const AskExpertListScreen = ({ navigation }) => {
           <Text style={styles.headerBackText}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tanya Ahli</Text>
-        {/* Bisa tambahkan ikon search atau tambah chat baru di kanan jika perlu */}
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Daftar Chat */}
-      <FlatList
-        data={dummyExpertChats}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        // Tampilkan pesan jika daftar kosong (opsional)
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Belum ada percakapan.</Text>
-            <Text style={styles.emptySubText}>
-              Mulai percakapan baru dengan ahli kami!
-            </Text>
-            {/* Bisa tambahkan tombol 'Mulai Chat Baru' di sini */}
-          </View>
-        }
+      {/* Tampilkan Loading atau Daftar */}
+      {loading && chatList.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6A453C" />
+        </View>
+      ) : (
+        <FlatList
+          data={chatList}
+          renderItem={renderItem}
+          keyExtractor={item => item.id.toString()}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          onRefresh={fetchExpertList}
+          refreshing={loading}
+          ListEmptyComponent={
+            !loading && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>Belum ada ahli tersedia.</Text>
+                <Text style={styles.emptySubText}>
+                  Tim kami sedang bekerja untuk menambahkan ahli baru.
+                </Text>
+              </View>
+            )
+          }
+        />
+      )}
+
+      {/* Modal Error */}
+      <InfoModal
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={modalTitle}
+        message={modalMessage}
       />
     </SafeAreaView>
   );
@@ -103,7 +144,7 @@ const AskExpertListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F0EBE3', // Background sedikit krem/abu
+    backgroundColor: '#F0EBE3',
   },
   header: {
     flexDirection: 'row',
@@ -111,25 +152,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 15,
     paddingVertical: 12,
-    backgroundColor: '#6A453C', // Coklat header
+    backgroundColor: '#6A453C',
   },
   headerButton: { padding: 5, minWidth: 40, alignItems: 'center' },
   headerBackText: { fontSize: 28, color: '#FFFFFF', fontWeight: 'bold' },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
   list: {
-    flex: 1, // Agar list mengisi sisa layar
+    flex: 1,
   },
   listContent: {
-    paddingTop: 10, // Jarak dari header
-    paddingHorizontal: 10, // Padding samping list
+    paddingTop: 10,
+    paddingHorizontal: 10,
     paddingBottom: 20,
+    flexGrow: 1,
   },
-  emptyContainer: {
-    // Style untuk saat list kosong
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 50, // Beri jarak dari atas
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 30,
   },
   emptyText: {

@@ -1,5 +1,5 @@
 // src/features/Marketplace/screens/TransferDetailsScreen.js
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,38 +9,62 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert, // Tetap gunakan Alert untuk feedback konfirmasi
   Platform,
+  ActivityIndicator, // <<< 1. Import
 } from 'react-native';
-// HAPUS: import Clipboard from '@react-native-clipboard/clipboard';
 
-// Impor gambar placeholder jika diperlukan
+import { supabase } from '../../../services/supabaseClient'; // <<< 2. Import
+import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import
 const placeholderImage = require('../../../../src/assets/images/dummyImage.png');
 
 const TransferDetailsScreen = ({ route, navigation }) => {
   const { orderDetails } = route.params || {};
 
-  const order = orderDetails || {
-    orderId: 'N/A',
-    productName: 'Produk Tidak Ditemukan',
-    variant: 'N/A',
-    quantity: 1,
-    price: 0,
-    total: 0,
-    paymentMethod: { name: 'Bank Tidak Diketahui', account: 'N/A' },
-    imageUrl: null,
-  };
+  // --- 4. State untuk loading & modal ---
+  const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
 
+  // --- 5. Tampilkan modal error jika orderDetails tidak ada ---
+  if (!orderDetails) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.headerButton}
+          >
+            <Text style={styles.headerBackText}>{'<'}</Text>
+          </TouchableOpacity>
+        </View>
+        <InfoModal
+          isVisible={true}
+          onClose={() => navigation.goBack()}
+          title="Error"
+          message="Detail pesanan tidak ditemukan."
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // --- 6. Ambil data dari orderDetails (bukan dummy) ---
+  const order = orderDetails;
   const paymentMethodName = order.paymentMethod?.name || 'Bank Tidak Diketahui';
   const paymentAccount = order.paymentMethod?.account || 'N/A';
   const totalAmount = order.total || 0;
-  const adminFee = 2000;
-  const productPriceTotal = (order.price || 0) * (order.quantity || 1);
+  const adminFee = 2000; // Hardcode, oke untuk sekarang
+
+  // <<< 7. FIX: Ambil dari 'productPrice' yang kita kirim
+  const productPriceTotal = (order.productPrice || 0) * (order.quantity || 1);
+  // <<< 8. FIX: Ambil dari 'imageUrl' yang kita kirim
   const imageSource = order.imageUrl
     ? { uri: order.imageUrl }
     : placeholderImage;
+
   const paymentDeadline = new Date(
-    Date.now() + 24 * 60 * 60 * 1000,
+    Date.now() + 24 * 60 * 60 * 1000, // 24 jam dari sekarang
   ).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -48,17 +72,43 @@ const TransferDetailsScreen = ({ route, navigation }) => {
   });
 
   const handleBackToHome = () => {
+    // Kembali ke root stack (MainApp) dan reset ke tab Jelajah
     navigation.navigate('MainApp', { screen: 'Jelajah' });
   };
 
-  // HAPUS: Fungsi copyToClipboard
+  // --- 9. Fungsi Konfirmasi Pembayaran (LOGIKA UTAMA BARU) ---
+  const handleConfirmPayment = async () => {
+    setLoading(true);
+    try {
+      // Update status order di tabel 'orders'
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'pending_verification' }) // <-- Ganti status!
+        .eq('id', order.orderId); // <-- Target order yang benar
 
-  const handleConfirmPayment = () => {
-    Alert.alert(
-      'Konfirmasi',
-      'Terima kasih telah melakukan konfirmasi. Pesanan akan segera diproses setelah pembayaran diverifikasi.',
-    );
-    handleBackToHome();
+      if (error) {
+        throw error;
+      }
+
+      // Tampilkan modal sukses
+      setModalTitle('Konfirmasi Terkirim');
+      setModalMessage(
+        'Terima kasih. Pesanan akan segera diproses setelah pembayaran diverifikasi.',
+      );
+      setModalVisible(true);
+
+      // Tutup modal dan kembali ke home setelah 3 detik
+      setTimeout(() => {
+        setModalVisible(false);
+        handleBackToHome();
+      }, 3000);
+    } catch (error) {
+      setModalTitle('Konfirmasi Gagal');
+      setModalMessage(error.message);
+      setModalVisible(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -73,7 +123,7 @@ const TransferDetailsScreen = ({ route, navigation }) => {
         >
           <Text style={styles.headerBackText}>{'<'}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Checkout</Text>
+        <Text style={styles.headerTitle}>Detail Pembayaran</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -83,11 +133,9 @@ const TransferDetailsScreen = ({ route, navigation }) => {
           <Text style={styles.paymentAmountLabel}>
             Jumlah yang harus dibayar
           </Text>
-          {/* HAPUS: TouchableOpacity di sini */}
           <Text style={styles.paymentAmountValue}>
             Rp {totalAmount.toLocaleString('id-ID')}
           </Text>
-          {/* <Text style={styles.balanceInfo}>Saldo R-Pay saat ini : Rp 1.000.000</Text> */}
           <View style={styles.paymentMethodInfo}>
             <Text style={styles.bankIcon}>🏦</Text>
             <Text style={styles.paymentMethodName}>{paymentMethodName}</Text>
@@ -101,12 +149,8 @@ const TransferDetailsScreen = ({ route, navigation }) => {
           </Text>
           <Text style={styles.instructionBody}>
             Mohon selesaikan pembayaran dengan mentransfer ke rekening tujuan di
-            bawah ini. Abaikan pesan ini jika Anda sudah melakukan pembayaran.
-            Pesanan akan otomatis dibatalkan jika melewati batas waktu.
-          </Text>
-          <Text style={styles.instructionBody}>
-            Setelah transfer berhasil, mohon tunggu proses verifikasi oleh tim
-            kami. Anda dapat menekan tombol "Konfirmasi" di bawah (opsional).
+            bawah ini. Pesanan akan otomatis dibatalkan jika melewati batas
+            waktu.
           </Text>
         </View>
 
@@ -114,12 +158,8 @@ const TransferDetailsScreen = ({ route, navigation }) => {
         <View style={[styles.card, styles.accountCard]}>
           <Text style={styles.accountLabel}>Rekening Tujuan:</Text>
           <View style={styles.accountRow}>
-            {/* HAPUS: TouchableOpacity di sini */}
             <Text style={styles.accountValue}>{paymentAccount}</Text>
-            {/* HAPUS: Tombol Salin */}
           </View>
-          {/* Tambahkan info Nama Pemilik Rekening jika ada */}
-          {/* <Text style={styles.accountOwnerName}>(a/n Nama Toko Keren)</Text> */}
         </View>
 
         {/* --- Ringkasan Produk --- */}
@@ -134,8 +174,9 @@ const TransferDetailsScreen = ({ route, navigation }) => {
                 Variasi: {order.variant}
               </Text>
             )}
+            {/* <<< 10. FIX: Gunakan order.productPrice */}
             <Text style={styles.productPriceSmall}>
-              Rp{order.price?.toLocaleString('id-ID')}
+              Rp{order.productPrice?.toLocaleString('id-ID')}
             </Text>
           </View>
           <Text style={styles.productQuantity}>x{order.quantity}</Text>
@@ -160,7 +201,7 @@ const TransferDetailsScreen = ({ route, navigation }) => {
               Total Pembayaran
             </Text>
             <Text style={[styles.detailValue, styles.totalValue]}>
-              Rp.{totalAmount.toLocaleString('id-ID')}
+              Rp {totalAmount.toLocaleString('id-ID')}
             </Text>
           </View>
         </View>
@@ -171,17 +212,29 @@ const TransferDetailsScreen = ({ route, navigation }) => {
         <TouchableOpacity
           style={styles.confirmButtonFooter}
           onPress={handleConfirmPayment}
+          disabled={loading} // <<< 11. Disable saat loading
         >
-          <Text style={styles.confirmButtonText}>Konfirmasi</Text>
+          {loading ? (
+            <ActivityIndicator color="#6A453C" />
+          ) : (
+            <Text style={styles.confirmButtonText}>Saya Sudah Bayar</Text>
+          )}
         </TouchableOpacity>
       </View>
+
+      {/* --- Modal Pop-up --- */}
+      <InfoModal
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={modalTitle}
+        message={modalMessage}
+      />
     </SafeAreaView>
   );
 };
 
-// --- STYLES (Sesuaikan jika perlu) ---
+// --- STYLES (Sama seperti sebelumnya, tapi lebih rapi) ---
 const styles = StyleSheet.create({
-  // ... (Sebagian besar style tetap sama) ...
   safeArea: { flex: 1, backgroundColor: '#F8F8F8' },
   header: {
     flexDirection: 'row',
@@ -208,7 +261,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFF',
     marginBottom: 20,
-    // Shadow (jika mau)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -265,7 +317,7 @@ const styles = StyleSheet.create({
   },
   accountCard: {
     alignItems: 'center',
-    shadowColor: '#000', // Shadow agar lebih menonjol
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
@@ -274,7 +326,7 @@ const styles = StyleSheet.create({
   accountLabel: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 8, // Tambah jarak bawah
+    marginBottom: 8,
   },
   accountRow: {
     flexDirection: 'row',
@@ -285,15 +337,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
-    // HAPUS: marginRight
   },
-  // HAPUS: Style copyButton
-  // accountOwnerName: { // Style untuk nama pemilik rekening (jika ditambahkan)
-  //    fontSize: 13,
-  //    color: '#888',
-  //    marginTop: 4,
-  // },
-
   productSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -351,8 +395,6 @@ const styles = StyleSheet.create({
     color: '#D32F2F',
     fontSize: 16,
   },
-
-  // Footer
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -372,6 +414,8 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     width: '100%',
     alignItems: 'center',
+    height: 50, // <<< Beri tinggi tetap
+    justifyContent: 'center', // <<< Pusatkan loading
   },
   confirmButtonText: {
     color: '#6A453C',

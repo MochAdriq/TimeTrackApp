@@ -1,5 +1,5 @@
 // src/features/Discussion/screens/DiscussionChoiceScreen.js
-import React from 'react';
+import React, { useState } from 'react'; // <<< 1. Import useState
 import {
   View,
   Text,
@@ -10,24 +10,25 @@ import {
   ScrollView,
 } from 'react-native';
 
-// --- Impor Aset (Ganti dengan SVG asli jika sudah ada) ---
-// import ExpertIcon from '../../../assets/icon/ExpertIcon.svg';
-// import CommunityIcon from '../../../assets/icon/CommunityIcon.svg';
-// import ChatIcon from '../../../assets/icon/ChatIcon.svg'; // Untuk header kanan
+// --- 2. Impor SVG Ikon Asli ---
+import PeopleIcon from '../../../assets/icon/PeopleIcon.svg';
+import GroupIcon from '../../../assets/icon/GroupIcon.svg';
+import ChatIcon from '../../../assets/icon/ChatIcon.svg';
+import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentModal'; // <<< 3. Impor Modal
 
 const DiscussionChoiceScreen = ({ navigation }) => {
+  const [isModalVisible, setModalVisible] = useState(false);
+
   const handleAskExpert = () => {
     navigation.navigate('AskExpertList');
   };
 
   const handleCommunityChat = () => {
-    console.log('Navigasi ke Daftar Grup Komunitas');
-    navigation.navigate('CommunityGroupList'); // Sesuaikan nama screen jika berbeda
+    navigation.navigate('CommunityGroupList');
   };
 
   const handleOpenChatList = () => {
-    console.log('Navigasi ke Daftar Semua Chat (Shortcut Header)');
-    // Nanti: navigation.navigate('ChatListScreen'); // Layar yang berisi gabungan chat ahli & grup
+    setModalVisible(true); // Buka modal
   };
 
   return (
@@ -43,14 +44,12 @@ const DiscussionChoiceScreen = ({ navigation }) => {
           <Text style={styles.headerBackText}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ruang Diskusi</Text>
-        {/* Ikon Chat Shortcut (sesuai permintaan alur baru) */}
+        {/* --- 6. Ganti Ikon Header --- */}
         <TouchableOpacity
           onPress={handleOpenChatList}
           style={styles.headerButton}
         >
-          {/* Ganti dengan ikon Chat SVG */}
-          <Text style={{ fontSize: 24, color: '#FFFFFF' }}>💬</Text>
-          {/* <ChatIcon width={24} height={24} fill="#FFF" /> */}
+          <ChatIcon width={24} height={24} fill="#FFF" />
         </TouchableOpacity>
       </View>
 
@@ -67,9 +66,8 @@ const DiscussionChoiceScreen = ({ navigation }) => {
           activeOpacity={0.8}
         >
           <View style={styles.optionIconContainer}>
-            {/* Ganti dengan Ikon Ahli */}
-            <Text style={styles.optionIcon}>👨‍🏫</Text>
-            {/* <ExpertIcon width={40} height={40} /> */}
+            {/* --- 7. Ganti Ikon Ahli --- */}
+            <PeopleIcon width={40} height={40} fill="#6A453C" />
           </View>
           <View style={styles.optionTextContainer}>
             <Text style={styles.optionTitle}>Tanya Ahli Sejarah</Text>
@@ -87,9 +85,8 @@ const DiscussionChoiceScreen = ({ navigation }) => {
           activeOpacity={0.8}
         >
           <View style={styles.optionIconContainer}>
-            {/* Ganti dengan Ikon Komunitas */}
-            <Text style={styles.optionIcon}>👥</Text>
-            {/* <CommunityIcon width={40} height={40} /> */}
+            {/* --- 8. Ganti Ikon Komunitas --- */}
+            <GroupIcon width={40} height={40} fill="#388E3C" />
           </View>
           <View style={styles.optionTextContainer}>
             <Text style={styles.optionTitle}>Chat Grup Komunitas</Text>
@@ -100,6 +97,12 @@ const DiscussionChoiceScreen = ({ navigation }) => {
           <Text style={styles.optionArrow}>{'>'}</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* --- 9. Tambahkan Modal --- */}
+      <UnderDevelopmentModal
+        isVisible={isModalVisible}
+        onClose={() => setModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -160,8 +163,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#C8E6C9', // Background hijau muda (contoh)
   },
   optionIconContainer: {
-    // Styling untuk wrapper ikon jika perlu (misal background bulat)
     marginRight: 15,
+    width: 40, // Beri lebar tetap
+    alignItems: 'center', // Pusatkan ikon
   },
   optionIcon: {
     fontSize: 35, // Ukuran ikon (emoji)

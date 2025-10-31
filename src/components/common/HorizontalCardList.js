@@ -1,45 +1,48 @@
 // src/components/common/HorizontalCardList.js
-
 import React from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
-import ContentCard from './ContentCard'; // Import komponen kartu
+import { View, FlatList } from 'react-native';
+import SectionHeader from './SectionHeader';
+import ContentCard from './ContentCard';
 
-const HorizontalCardList = ({ data }) => {
-  const handleCardPress = item => {
-    // --- TODO: Navigasi ke detail item ---
-    console.log('Card pressed:', item.id || item.title);
-    // Contoh: navigation.navigate('DetailScreen', { itemId: item.id });
+// --- 1. Terima 2 props baru: favoriteMateriIds dan onToggleFavorite ---
+const HorizontalCardList = ({
+  data,
+  title,
+  onCardPress,
+  onSeeAllPress,
+  favoriteMateriIds,
+  onToggleFavorite,
+}) => {
+  const renderItem = ({ item }) => {
+    // --- 2. Cek apakah item ini ada di daftar favorit ---
+    const isFavorite = favoriteMateriIds
+      ? favoriteMateriIds.has(item.id)
+      : false;
+
+    return (
+      <ContentCard
+        item={item}
+        onPress={onCardPress}
+        // --- 3. Teruskan props ke ContentCard ---
+        isFavorite={isFavorite}
+        onToggleFavorite={() => onToggleFavorite(item.id, isFavorite)}
+      />
+    );
   };
 
-  const renderItem = ({ item }) => (
-    <ContentCard
-      imageUrl={item.imageUrl} // Pastikan data punya properti ini
-      title={item.title} // Pastikan data punya properti ini
-      subtitle={item.subtitle} // Pastikan data punya properti ini (opsional)
-      onPress={() => handleCardPress(item)}
-      itemData={item}
-    />
-  );
-
   return (
-    <FlatList
-      data={data}
-      renderItem={renderItem}
-      keyExtractor={item => item.id || item.title} // Gunakan ID unik atau title
-      horizontal // Membuat list menjadi horizontal
-      showsHorizontalScrollIndicator={false} // Sembunyikan scroll bar horizontal
-      contentContainerStyle={styles.listContentContainer} // Style untuk container list
-      // snapToInterval={cardWidth + cardMargin} // Opsional: Agar scroll 'snap' per kartu
-      // decelerationRate="fast" // Opsional: Efek scroll snap
-    />
+    <View style={{ marginVertical: 10 }}>
+      <SectionHeader title={title} onSeeAllPress={onSeeAllPress} />
+      <FlatList
+        data={data}
+        renderItem={renderItem}
+        keyExtractor={item => item.id.toString()}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingLeft: 15, paddingRight: 5 }} // Padding list
+      />
+    </View>
   );
 };
-
-const styles = StyleSheet.create({
-  listContentContainer: {
-    paddingRight: 15, // Beri padding di akhir list agar kartu terakhir tidak mepet
-    paddingVertical: 5, // Sedikit padding vertikal untuk shadow
-  },
-});
 
 export default HorizontalCardList;

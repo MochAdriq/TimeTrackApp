@@ -1,39 +1,47 @@
 // src/features/Marketplace/components/CheckoutModal.js
-import React, { useState } from 'react';
-import {
-  Alert,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
+import React, { useState, useEffect } from 'react'; // <<< 1. Tambah useEffect
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Modal from 'react-native-modal';
+import { useNavigation } from '@react-navigation/native';
 
-import { useNavigation } from '@react-navigation/native'; // <<< IMPORT
+// <<< 2. Terima 'selectedVariant' dari props
+const CheckoutModal = ({ isVisible, onClose, itemData, selectedVariant }) => {
+  const navigation = useNavigation();
 
-// const placeholderImage = require('../../../assets/images/placeholder_image.png');
+  // <<< 3. Gunakan itemData langsung (asumsi sudah divalidasi di parent)
+  const product = itemData;
 
-const CheckoutModal = ({ isVisible, onClose, itemData }) => {
-  const navigation = useNavigation(); // <<< Dapatkan navigation
-  // Ambil data produk (bisa dilempar dari ProductDetailScreen)
-  const product = itemData || {
-    title: 'Buku Sejarah',
-    price: 100000,
-    stock: 3,
-    variants: ['Part 1', 'Part 2', 'part 3'],
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Buku',
-  };
-
-  const [selectedVariant, setSelectedVariant] = useState(product.variants[0]);
+  // <<< 4. State HANYA untuk quantity
   const [quantity, setQuantity] = useState(1);
 
-  const imageSource = product.imageUrl
-    ? { uri: product.imageUrl }
-    : require('../../../../src/assets/images/dummyImage.png'); // Sediakan placeholder
+  // Reset quantity ke 1 setiap kali modal dibuka
+  useEffect(() => {
+    if (isVisible) {
+      setQuantity(1);
+    }
+  }, [isVisible]);
+
+  // --- Safety Check ---
+  // Jika 'product' (itemData) null, jangan render apa-apa
+  if (!product) {
+    return (
+      <Modal isVisible={isVisible} style={styles.modal}>
+        <View style={styles.contentContainer} />
+      </Modal>
+    );
+  }
+  // --- Akhir Safety Check ---
+
+  // <<< 5. Ambil data dengan aman (gunakan fallback)
+  const imageSource = product.image_url
+    ? { uri: product.image_url }
+    : require('../../../../src/assets/images/dummyImage.png');
+
+  const price = product.price || 0;
+  const stock = product.stock || 0;
 
   const handleIncrement = () => {
-    if (quantity < product.stock) {
+    if (quantity < stock) {
       setQuantity(q => q + 1);
     }
   };
@@ -45,20 +53,65 @@ const CheckoutModal = ({ isVisible, onClose, itemData }) => {
   };
 
   const handleAddToCart = () => {
-    console.log(`Add to Cart: ${quantity} x ${selectedVariant}`);
-    onClose(); // Tutup modal setelah aksi
+    console.log(`Add to Cart: ${quantity} x ${selectedVariant || 'Default'}`);
+    onClose();
   };
 
   const handleBuyNow = () => {
-    console.log(`Buy Now: ${quantity} x ${selectedVariant}`);
-    onClose(); // 1. Tutup modal
-    // 2. Navigasi ke Checkout
+    console.log(`Buy Now: ${quantity} x ${selectedVariant || 'Default'}`);
+    onClose();
     navigation.navigate('Checkout', {
       product: product,
       quantity: quantity,
-      variant: selectedVariant,
-      // Kirim data yang diperlukan ke CheckoutScreen
+      variant: selectedVariant, // <<< Kirim varian yang dipilih dari parent
     });
+  };
+
+  // <<< 6. Fungsi baru untuk render varian (yang jauh lebih aman)
+  const renderVariantInfo = () => {
+    // Jika ada varian yang dipilih dari parent, tampilkan itu
+    if (selectedVariant) {
+      return (
+        <>
+          <Text style={styles.label}>Varian Dipilih</Text>
+          <View style={styles.variantContainer}>
+            <View style={[styles.variantButton, styles.variantButtonSelected]}>
+              <Text style={[styles.variantText, styles.variantTextSelected]}>
+                {selectedVariant}
+              </Text>
+            </View>
+          </View>
+        </>
+      );
+    }
+
+    // Jika produk tidak punya varian (variants: null)
+    // atau jika varian adalah object kosong
+    if (
+      !product.variants ||
+      (typeof product.variants === 'object' &&
+        !Array.isArray(product.variants) &&
+        Object.keys(product.variants).length === 0)
+    ) {
+      return (
+        <>
+          <Text style={styles.label}>Varian</Text>
+          <Text style={styles.defaultVariantText}>
+            Produk ini tidak memiliki varian.
+          </Text>
+        </>
+      );
+    }
+
+    // Jika ada varian TAPI user belum memilih (misal produk baru dibuka)
+    return (
+      <>
+        <Text style={styles.label}>Varian</Text>
+        <Text style={styles.defaultVariantText}>
+          Harap pilih varian di halaman detail.
+        </Text>
+      </>
+    );
   };
 
   return (
@@ -74,47 +127,22 @@ const CheckoutModal = ({ isVisible, onClose, itemData }) => {
     >
       {/* Konten Modal */}
       <View style={styles.contentContainer}>
-        {/* Handle (opsional) */}
         <View style={styles.handle} />
 
         {/* Info Produk (Atas) */}
         <View style={styles.productHeader}>
           <Image source={imageSource} style={styles.thumbnail} />
           <View style={styles.headerText}>
-            <Text style={styles.price}>
-              Rp{product.price.toLocaleString('id-ID')}
+            <Text style={styles.price}>Rp{price.toLocaleString('id-ID')}</Text>
+            <Text style={styles.stock}>
+              {stock > 0 ? `Stock: Sisa ${stock}` : 'Stock Habis'}
             </Text>
-            <Text style={styles.stock}>Stock: Sisa {product.stock}</Text>
           </View>
         </View>
 
         {/* Varian */}
-        <Text style={styles.label}>Varian</Text>
-        <View style={styles.variantContainer}>
-          {product.variants.map(variant => (
-            <TouchableOpacity
-              key={variant}
-              style={[
-                styles.variantButton,
-                selectedVariant === variant
-                  ? styles.variantButtonSelected
-                  : styles.variantButtonDefault,
-              ]}
-              onPress={() => setSelectedVariant(variant)}
-            >
-              <Text
-                style={[
-                  styles.variantText,
-                  selectedVariant === variant
-                    ? styles.variantTextSelected
-                    : styles.variantTextDefault,
-                ]}
-              >
-                {variant}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* <<< 7. Panggil fungsi render baru. INI YANG MENGHAPUS .map() >>> */}
+        {renderVariantInfo()}
 
         {/* Jumlah */}
         <View style={styles.quantityRow}>
@@ -123,6 +151,7 @@ const CheckoutModal = ({ isVisible, onClose, itemData }) => {
             <TouchableOpacity
               style={styles.quantityButton}
               onPress={handleDecrement}
+              disabled={quantity === 1} // <<< Tambah disable
             >
               <Text style={styles.quantityButtonText}>−</Text>
             </TouchableOpacity>
@@ -130,6 +159,7 @@ const CheckoutModal = ({ isVisible, onClose, itemData }) => {
             <TouchableOpacity
               style={styles.quantityButton}
               onPress={handleIncrement}
+              disabled={quantity >= stock || stock === 0} // <<< Tambah disable
             >
               <Text style={styles.quantityButtonText}>+</Text>
             </TouchableOpacity>
@@ -141,14 +171,20 @@ const CheckoutModal = ({ isVisible, onClose, itemData }) => {
           <TouchableOpacity
             style={[styles.actionButton, styles.cartButton]}
             onPress={handleAddToCart}
+            disabled={stock === 0} // <<< Disable jika stock habis
           >
             <Text style={[styles.actionButtonText, styles.cartButtonText]}>
               Keranjang
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.buyButton]}
+            style={[
+              styles.actionButton,
+              styles.buyButton,
+              stock === 0 && styles.disabledBuyButton, // <<< Style disable
+            ]}
             onPress={handleBuyNow}
+            disabled={stock === 0} // <<< Disable jika stock habis
           >
             <Text style={[styles.actionButtonText, styles.buyButtonText]}>
               Beli Sekarang
@@ -160,6 +196,7 @@ const CheckoutModal = ({ isVisible, onClose, itemData }) => {
   );
 };
 
+// --- STYLES (Dengan tambahan style baru) ---
 const styles = StyleSheet.create({
   modal: {
     justifyContent: 'flex-end',
@@ -185,7 +222,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   thumbnail: {
-    width: 80, // Ukuran thumbnail di modal
+    width: 80,
     height: 80,
     borderRadius: 10,
     backgroundColor: '#E0E0E0',
@@ -202,7 +239,7 @@ const styles = StyleSheet.create({
   },
   stock: {
     fontSize: 14,
-    color: '#FF6B6B', // Merah (estimasi)
+    color: '#FF6B6B',
     fontWeight: '500',
   },
   label: {
@@ -213,7 +250,7 @@ const styles = StyleSheet.create({
   },
   variantContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap', // Agar bisa ke baris baru jika varian banyak
+    flexWrap: 'wrap',
     marginBottom: 20,
   },
   variantButton: {
@@ -222,19 +259,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 15,
     marginRight: 10,
-    marginBottom: 10, // Jika wrap
-  },
-  variantButtonDefault: {
-    backgroundColor: '#F5F5F5',
-    borderColor: '#E0E0E0',
+    marginBottom: 10,
   },
   variantButtonSelected: {
     backgroundColor: '#E3D5B8',
     borderColor: '#E3D5B8',
   },
   variantText: { fontSize: 13 },
-  variantTextDefault: { color: '#555' },
   variantTextSelected: { color: '#6A453C', fontWeight: 'bold' },
+  defaultVariantText: {
+    // <<< Style baru
+    fontSize: 14,
+    color: '#777',
+    marginBottom: 20,
+  },
   quantityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -269,7 +307,7 @@ const styles = StyleSheet.create({
   actionButtonContainer: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 10, // Jarak ke bawah
+    marginBottom: 10,
   },
   actionButton: {
     flex: 1,
@@ -290,6 +328,10 @@ const styles = StyleSheet.create({
   },
   buyButtonText: {
     color: '#FFFFFF',
+  },
+  disabledBuyButton: {
+    // <<< Style baru
+    backgroundColor: '#E0E0E0',
   },
   actionButtonText: {
     fontSize: 15,

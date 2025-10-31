@@ -10,74 +10,243 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator, // <<< 1. Import
 } from 'react-native';
 
 // --- Impor Aset & Modal ---
-// const starIcon = require('../../../assets/icons/StarIcon.svg');
-// const backArrowIcon = require('../../../assets/icons/BackArrowIcon.svg');
-const placeholderImage = require('../../../../src/assets/images/dummyImage.png'); // Sediakan placeholder
-import CheckoutModal from '../components/CheckoutModal'; // <<<--- 1. IMPORT MODAL
+import { supabase } from '../../../services/supabaseClient'; // <<< 2. Import Supabase
+import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import Modal Error
+import CheckoutModal from '../components/CheckoutModal';
 
+const placeholderImage = require('../../../../src/assets/images/dummyImage.png');
 const { width: screenWidth } = Dimensions.get('window');
 const imageHeight = screenWidth;
 
-// --- Data Dummy (Nanti diambil dari route.params) ---
-const dummyProduct = {
-  id: '1',
-  title: 'Buku Sejarah',
-  soldCount: '786+',
-  rating: 4.9,
-  price: 100000,
-  variants: ['Part 1', 'Part 2', 'Part 3'],
-  stock: 3, // Tambahkan info stock
-  imageUrl: 'https://via.placeholder.com/400x400/EEEEEE/333?text=Buku+Detail',
-  description: `Kondisi : Baru
-Min. Pemesanan: 1 Buah
-Etalase : Jaket Bulu Angsa
-
-HARAP BACA SEBELUM ORDER YAH
-Estmasi ukuran : 
-all size M-XL
-
-READY STOCK ( no po ) BARANG YANG HABIS AKAN
-SEGERA KITA DELETE...
-Tolong cek di katalog ready yah..
-jangan di list product terjual......`,
-  infoPenting:
-    'Info pengiriman:\n- JNE: Senin - Jumat\n- Gojek: Setiap Hari\n\nGaransi 1 minggu.',
-};
+// --- Hapus Data Dummy ---
+// const dummyProduct = { ... };
 
 const ProductDetailScreen = ({ route, navigation }) => {
-  // const { productId } = route.params;
-  // const item = route.params.itemData || dummyProduct; // Ambil data dari navigasi
+  // --- 4. Ambil data awal dari parameter navigasi ---
+  const { productId, itemData: initialItemData } = route.params;
 
-  // Untuk sekarang, kita pakai data dummy
-  const item = dummyProduct;
-
-  const [selectedVariant, setSelectedVariant] = useState(item.variants[0]);
+  // --- 5. State untuk data lengkap, loading, dan error ---
+  const [item, setItem] = useState(initialItemData); // Tampilkan data awal dulu
+  const [loading, setLoading] = useState(true); // Set true untuk fetch detail
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [activeTab, setActiveTab] = useState('Detail');
-
-  // --- 2. STATE UNTUK MODAL ---
   const [isCheckoutModalVisible, setCheckoutModalVisible] = useState(false);
 
-  const imageSource = item.imageUrl ? { uri: item.imageUrl } : placeholderImage;
+  // --- Modal Error State ---
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
 
+  // --- 6. Fungsi untuk fetch data detail dari Supabase ---
+  const fetchProductDetail = async () => {
+    if (!productId) {
+      showError('Error', 'ID Produk tidak ditemukan.', true);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', productId)
+        .single(); // Ambil satu data saja
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setItem(data);
+        // Set varian default jika ada
+        if (data.variants && data.variants.length > 0) {
+          // Cek tipe data variants, jika JSON, ambil key pertama
+          if (
+            typeof data.variants === 'object' &&
+            !Array.isArray(data.variants)
+          ) {
+            const variantKeys = Object.keys(data.variants);
+            if (variantKeys.length > 0) {
+              const firstVariantName = variantKeys[0];
+              const firstVariantValue = data.variants[firstVariantName][0];
+              setSelectedVariant(firstVariantValue || null);
+            }
+          } else if (Array.isArray(data.variants)) {
+            setSelectedVariant(data.variants[0]);
+          }
+        }
+      } else {
+        // Produk tidak ditemukan
+        showError('Error', 'Produk tidak ditemukan atau sudah dihapus.', true);
+      }
+    } catch (error) {
+      showError('Gagal Memuat', `Terjadi kesalahan: ${error.message}`, true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- 7. Panggil fetchProductDetail saat komponen dimuat ---
+  useEffect(() => {
+    fetchProductDetail();
+  }, [productId]);
+
+  // --- 8. Fungsi untuk menampilkan modal error ---
+  const showError = (title, message, goBack = false) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalVisible(true);
+    // Jika 'goBack' true, arahkan user kembali saat modal ditutup
+    if (goBack) {
+      setTimeout(() => {
+        setModalVisible(false);
+        navigation.goBack();
+      }, 2500); // Tampilkan error 2.5 detik lalu kembali
+    }
+  };
+
+  // --- Fungsi Modal (tidak berubah) ---
   const handleAddToCart = () => {
     console.log('Add to Cart pressed');
-    // Boss bisa pilih: mau langsung ke keranjang, atau buka modal juga
-    setCheckoutModalVisible(true); // Contoh: Buka modal juga
+    setCheckoutModalVisible(true);
   };
 
   const handleBuyNow = () => {
-    // --- 3. BUKA MODAL ---
     console.log('Buy Now pressed, opening modal...');
-    setCheckoutModalVisible(true); // <<< Buka modal
+    setCheckoutModalVisible(true);
   };
 
+  const closeCheckoutModal = () => setCheckoutModalVisible(false);
   const handleSeeMore = () => console.log('See More Description');
 
-  // --- 4. FUNGSI UNTUK MENUTUP MODAL ---
-  const closeCheckoutModal = () => setCheckoutModalVisible(false);
+  // --- 9. Render Loading jika data belum siap ---
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
+        {/* Header minimalis saat loading */}
+        <View style={styles.headerPlaceholder}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButtonLoading}
+          >
+            <Text style={styles.backButtonTextLoading}>{'<'}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6A453C" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- 10. Tampilkan "Produk tidak ditemukan" jika item null (setelah loading) ---
+  if (!item) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
+        <View style={styles.headerPlaceholder}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButtonLoading}
+          >
+            <Text style={styles.backButtonTextLoading}>{'<'}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text>Produk tidak ditemukan.</Text>
+        </View>
+        <InfoModal
+          isVisible={modalVisible}
+          onClose={() => {
+            setModalVisible(false);
+            navigation.goBack(); // Kembali saat modal ditutup
+          }}
+          title={modalTitle}
+          message={modalMessage}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // --- 11. Render Varian dengan aman (dari data JSON) ---
+  const renderVariants = () => {
+    if (!item.variants) return null;
+
+    // Jika variants adalah OBJEK (JSONB)
+    if (typeof item.variants === 'object' && !Array.isArray(item.variants)) {
+      return Object.keys(item.variants).map(variantName => (
+        <View key={variantName} style={styles.variantGroup}>
+          <Text style={styles.variantName}>{variantName}:</Text>
+          <View style={styles.variantContainer}>
+            {item.variants[variantName].map(variantValue => (
+              <TouchableOpacity
+                key={variantValue}
+                style={[
+                  styles.variantButton,
+                  selectedVariant === variantValue &&
+                    styles.variantButtonSelected,
+                ]}
+                onPress={() => setSelectedVariant(variantValue)}
+              >
+                <Text
+                  style={[
+                    styles.variantText,
+                    selectedVariant === variantValue &&
+                      styles.variantTextSelected,
+                  ]}
+                >
+                  {variantValue}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ));
+    }
+
+    // Jika variants adalah ARRAY (data lama)
+    if (Array.isArray(item.variants)) {
+      return (
+        <View style={styles.variantContainer}>
+          {item.variants.map(variant => (
+            <TouchableOpacity
+              key={variant}
+              style={[
+                styles.variantButton,
+                selectedVariant === variant && styles.variantButtonSelected,
+              ]}
+              onPress={() => setSelectedVariant(variant)}
+            >
+              <Text
+                style={[
+                  styles.variantText,
+                  selectedVariant === variant && styles.variantTextSelected,
+                ]}
+              >
+                {variant}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  const imageSource = item.image_url
+    ? { uri: item.image_url }
+    : placeholderImage;
+  const itemPrice = item.price || 0;
+  const itemSoldCount = item.sold_count || '0';
+  const itemRating = item.rating || 0;
+  const itemDescription = item.description || 'Tidak ada deskripsi.';
+  const itemInfoPenting = item.info_penting || 'Tidak ada info penting.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -95,7 +264,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
         {/* === Bagian Gambar (Atas) === */}
         <View style={styles.imageContainer}>
           <Image source={imageSource} style={styles.image} resizeMode="cover" />
-          {/* Tombol Kembali (Absolute) */}
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backButton}
@@ -106,46 +274,24 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
         {/* === Konten Putih (Overlap) === */}
         <View style={styles.contentArea}>
-          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.title}>{item.name}</Text>
 
-          {/* Meta Info */}
           <View style={styles.metaContainer}>
-            <Text style={styles.metaText}>Terjual {item.soldCount}</Text>
+            <Text style={styles.metaText}>Terjual {itemSoldCount}</Text>
             <View style={styles.ratingContainer}>
               <View style={styles.starPlaceholder}>
                 <Text style={{ color: '#F9A825' }}>⭐</Text>
               </View>
-              <Text style={styles.metaText}>{item.rating}</Text>
+              <Text style={styles.metaText}>{itemRating}</Text>
             </View>
           </View>
 
-          {/* Harga */}
           <Text style={styles.price}>
-            Rp{item.price.toLocaleString('id-ID')}
+            Rp{itemPrice.toLocaleString('id-ID')}
           </Text>
 
           {/* Varian (Part 1, 2, 3) */}
-          <View style={styles.variantContainer}>
-            {item.variants.map(variant => (
-              <TouchableOpacity
-                key={variant}
-                style={[
-                  styles.variantButton,
-                  selectedVariant === variant && styles.variantButtonSelected,
-                ]}
-                onPress={() => setSelectedVariant(variant)}
-              >
-                <Text
-                  style={[
-                    styles.variantText,
-                    selectedVariant === variant && styles.variantTextSelected,
-                  ]}
-                >
-                  {variant}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {renderVariants()}
 
           {/* Tombol Aksi (Keranjang & Beli) */}
           <View style={styles.actionButtonContainer}>
@@ -207,33 +353,63 @@ const ProductDetailScreen = ({ route, navigation }) => {
           <View style={styles.tabContent}>
             <Text
               style={styles.descriptionText}
-              numberOfLines={activeTab === 'Detail' ? 10 : undefined}
+              // numberOfLines={activeTab === 'Detail' ? 10 : undefined} // Hapus batasan baris sementara
             >
-              {activeTab === 'Detail' ? item.description : item.infoPenting}
+              {activeTab === 'Detail' ? itemDescription : itemInfoPenting}
             </Text>
-            {activeTab === 'Detail' && (
+            {/* {activeTab === 'Detail' && (
               <TouchableOpacity onPress={handleSeeMore}>
                 <Text style={styles.seeMoreText}>Lihat Selengkapnya</Text>
               </TouchableOpacity>
-            )}
+            )} */}
           </View>
         </View>
       </ScrollView>
 
-      {/* --- 5. RENDER MODAL DI SINI (DI LUAR SCROLLVIEW) --- */}
+      {/* --- Render Modal Checkout --- */}
       <CheckoutModal
         isVisible={isCheckoutModalVisible}
         onClose={closeCheckoutModal}
-        itemData={item} // Kirim data produk ke modal
+        itemData={item}
+        selectedVariant={selectedVariant} // Kirim varian terpilih
       />
-      {/* --- AKHIR RENDER MODAL --- */}
+
+      {/* --- Render Modal Error --- */}
+      <InfoModal
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={modalTitle}
+        message={modalMessage}
+      />
     </SafeAreaView>
   );
 };
 
-// --- STYLES (Tetap sama) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  // --- Style Header Loading ---
+  headerPlaceholder: {
+    paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 25,
+    paddingHorizontal: 15,
+    backgroundColor: '#FFFFFF',
+  },
+  backButtonLoading: {
+    backgroundColor: '#F0F0F0',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonTextLoading: { fontSize: 24, color: '#333', fontWeight: 'bold' },
+  // --- Style Loading ---
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  // ---
   scrollView: { flex: 1, backgroundColor: '#F4F4F4' },
   scrollContent: { paddingBottom: 40 },
   imageContainer: {
@@ -271,7 +447,18 @@ const styles = StyleSheet.create({
   ratingContainer: { flexDirection: 'row', alignItems: 'center' },
   starPlaceholder: { marginRight: 4 },
   price: { fontSize: 28, fontWeight: 'bold', color: '#000', marginBottom: 20 },
-  variantContainer: { flexDirection: 'row', marginBottom: 20 },
+  // --- Style Varian Baru ---
+  variantGroup: {
+    marginBottom: 15,
+  },
+  variantName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  variantContainer: { flexDirection: 'row', flexWrap: 'wrap' }, // Tambah flexWrap
+  // ---
   variantButton: {
     backgroundColor: '#F5F5F5',
     borderWidth: 1,
@@ -280,6 +467,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 15,
     marginRight: 10,
+    marginBottom: 10, // Tambah margin bottom
   },
   variantButtonSelected: {
     backgroundColor: '#E3D5B8',

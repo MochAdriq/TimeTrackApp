@@ -1,90 +1,75 @@
 // src/features/Marketplace/screens/MarketPlaceScreen.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  FlatList, // <<< Pakai FlatList
+  FlatList,
   StatusBar,
   TouchableOpacity,
+  ActivityIndicator, // <<< 1. Import
 } from 'react-native';
-import ProductCard from '../components/ProductCard'; // Import kartu produk
-// import MarketplaceHeader from '../components/MarketplaceHeader'; // Nanti
-
-// --- Data Dummy ---
-const dummyProducts = [
-  {
-    id: '1',
-    title: 'Buku Sejarah Sumatera',
-    price: 200000,
-    rating: 4.9,
-    soldCount: '786',
-    location: 'Kota Bandung',
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Buku+1',
-    discount: '-79%',
-  },
-  {
-    id: '2',
-    title: 'Buku Sejarah Sumatera',
-    price: 1257000,
-    rating: 4.9,
-    soldCount: '245',
-    location: 'Kab. Tangerang',
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Buku+2',
-    discount: '-79%',
-  },
-  {
-    id: '3',
-    title: 'Buku Sejarah Sumatera',
-    price: 1257000,
-    rating: 4.7,
-    soldCount: '100',
-    location: 'Jakarta Pusat',
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Buku+3',
-    discount: '-79%',
-  },
-  {
-    id: '4',
-    title: 'Buku Sejarah Sumatera',
-    price: 1250000,
-    rating: 4.8,
-    soldCount: '290',
-    location: 'Bekasi',
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Buku+4',
-    discount: '-79%',
-  },
-  {
-    id: '5',
-    title: 'Dispenser Multifung...',
-    price: 1069000,
-    rating: 4.9,
-    soldCount: '215',
-    location: 'Kab. Tangerang',
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Dispenser',
-    discount: '-79%',
-  },
-  {
-    id: '6',
-    title: 'Meja Belajar Aesthe...',
-    price: 300000,
-    rating: 4.9,
-    soldCount: '99',
-    location: 'Jakarta Utara',
-    imageUrl: 'https://via.placeholder.com/150/EEEEEE/333?text=Meja',
-    discount: '-79%',
-  },
-];
+import ProductCard from '../components/ProductCard';
+import { supabase } from '../../../services/supabaseClient'; // <<< 2. Import Supabase
+import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import Modal Error
 
 const MarketPlaceScreen = ({ navigation }) => {
+  // --- 4. State untuk data, loading, dan error ---
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+
+  // --- 5. Fungsi untuk menampilkan error ---
+  const showError = (title, message) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalVisible(true);
+  };
+
+  // --- 6. Fungsi fetch data dari Supabase ---
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      // Ambil data dari tabel 'products'
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false }); // Urutkan berdasarkan terbaru
+
+      if (error) {
+        throw error; // Lempar error jika ada
+      }
+
+      // Pastikan data adalah array
+      setProducts(data || []);
+    } catch (error) {
+      setProducts([]); // Kosongkan data jika gagal
+      showError(
+        'Gagal Memuat Produk',
+        `Terjadi kesalahan saat mengambil data: ${error.message}`,
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- 7. Panggil fetchProducts saat komponen dimuat ---
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  // Fungsi navigasi (tidak berubah)
   const handleProductPress = item => {
-    console.log('Product pressed:', item.id);
     navigation.navigate('ProductDetail', {
       productId: item.id,
-      itemData: item,
+      itemData: item, // Kirim data lengkap ke detail
     });
   };
 
+  // Render item (tidak berubah)
   const renderProductItem = ({ item }) => (
     <ProductCard item={item} onPress={handleProductPress} />
   );
@@ -93,7 +78,7 @@ const MarketPlaceScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
 
-      {/* --- Header Kustom (Placeholder Dulu) --- */}
+      {/* --- Header Kustom (Tetap sama) --- */}
       <View style={styles.headerPlaceholder}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -104,23 +89,40 @@ const MarketPlaceScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>Market Place</Text>
         <View style={{ width: 40 }} />
       </View>
-      {/* <MarketplaceHeader /> */}
 
-      {/* --- Tab Rekomendasi (Placeholder) --- */}
-      {/* <View style={styles.tabContainer}>
-        <View style={styles.tabActive}>
-          <Text style={styles.tabActiveText}>Rekomendasi untuk kamu</Text>
+      {/* --- 8. Tampilkan Loading atau Grid Produk --- */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6A453C" />
         </View>
-      </View> */}
+      ) : (
+        <FlatList
+          data={products} // <<< Gunakan data dari state
+          renderItem={renderProductItem}
+          keyExtractor={item => item.id.toString()} // Pastikan ID jadi string
+          numColumns={2}
+          style={styles.gridList}
+          contentContainerStyle={styles.gridContent}
+          // Tambahkan ini untuk refresh
+          onRefresh={fetchProducts}
+          refreshing={loading}
+          // Tampilkan pesan jika data kosong
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                Belum ada produk yang dijual.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
-      {/* --- Grid Produk --- */}
-      <FlatList
-        data={dummyProducts}
-        renderItem={renderProductItem}
-        keyExtractor={item => item.id}
-        numColumns={2} // <<< INI KUNCI UNTUK GRID 2 KOLOM
-        style={styles.gridList}
-        contentContainerStyle={styles.gridContent}
+      {/* --- 9. Modal Error --- */}
+      <InfoModal
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={modalTitle}
+        message={modalMessage}
       />
     </SafeAreaView>
   );
@@ -129,9 +131,8 @@ const MarketPlaceScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F4F4F4', // Background abu muda
+    backgroundColor: '#F4F4F4',
   },
-  // --- Style Placeholder Header ---
   headerPlaceholder: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -142,33 +143,33 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 5 },
   backButtonText: { fontSize: 24, color: '#FFFFFF', fontWeight: 'bold' },
-  headerTitle: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' }, // Judul placeholder
-  // --- Akhir Placeholder Header ---
-
-  tabContainer: {
-    backgroundColor: '#6A453C', // Lanjutan header
-    paddingBottom: 10,
-    paddingHorizontal: 15,
-    alignItems: 'flex-start', // Ratakan ke kiri
-  },
-  tabActive: {
-    backgroundColor: '#D0AA7B', // Coklat muda (estimasi)
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-  },
-  tabActiveText: {
-    color: '#4A2F2F', // Coklat tua
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
+  headerTitle: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
   gridList: {
     flex: 1,
-    backgroundColor: '#F4F4F4', // Background list
   },
   gridContent: {
-    padding: 9, // Padding = (margin kartu * 2) - margin luar
+    padding: 9,
   },
+  // --- 10. Tambahkan style baru ---
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F4F4F4',
+  },
+  emptyContainer: {
+    flex: 1,
+    marginTop: 50,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#888',
+  },
+  // Style lama (dihapus karena tidak dipakai)
+  // tabContainer: { ... },
+  // tabActive: { ... },
+  // tabActiveText: { ... },
 });
 
 export default MarketPlaceScreen;

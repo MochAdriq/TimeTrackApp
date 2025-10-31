@@ -70,31 +70,33 @@ const LeaderboardModal = ({ isVisible, onClose, quizId }) => {
       // - Ambil data 'username' & 'avatar_url' dari tabel 'profiles'
       // - Batasi 10 besar
       const { data, error } = await supabase
-        .from('quiz_attempts')
+        .from('quiz_leaderboard') // <-- Ambil dari VIEW
         .select(
           `
           user_id,
-          score,
+          high_score, 
           profiles (
             username,
             avatar_url
           )
         `,
         )
-        .eq('quiz_id', quizId) // Filter kuis yang ini saja
-        .order('score', { ascending: false }) // Urutkan skor tertinggi
-        .limit(10); // Ambil 10 besar
-
-      if (error) throw error;
+        .eq('quiz_id', quizId)
+        .order('high_score', { ascending: false }) // <-- Order by kolom VIEW
+        .limit(10);
 
       // 3. Format data untuk menandai user
-      const formattedData = data
-        // Filter data yang profilnya tidak sengaja null
+      if (error) {
+        // Jika ada error dari Supabase, lempar agar ditangkap 'catch'
+        throw error;
+      }
+
+      const formattedData = (data || [])
         .filter(item => item.profiles)
         .map(item => ({
           ...item,
-          id: item.user_id, // Gunakan user_id sebagai ID unik
-          isUser: item.user_id === user?.id, // Tandai jika ini adalah user kita
+          score: item.high_score,
+          isUser: item.user_id === user?.id,
         }));
 
       setLeaderboardData(formattedData);
@@ -139,7 +141,7 @@ const LeaderboardModal = ({ isVisible, onClose, quizId }) => {
             renderItem={({ item, index }) => (
               <LeaderboardItem item={item} rank={index + 1} />
             )}
-            keyExtractor={item => item.id}
+            keyExtractor={item => item.user_id.toString()}
             style={styles.list}
             ListHeaderComponent={
               <Text style={styles.title}>Peringkat Kuis Ini</Text>
