@@ -14,7 +14,6 @@ const HorizontalCardList = ({
   onToggleFavorite,
 }) => {
   const renderItem = ({ item }) => {
-    // --- 2. Cek apakah item ini ada di daftar favorit ---
     const isFavorite = favoriteMateriIds
       ? favoriteMateriIds.has(item.id)
       : false;
@@ -23,9 +22,14 @@ const HorizontalCardList = ({
       <ContentCard
         item={item}
         onPress={onCardPress}
-        // --- 3. Teruskan props ke ContentCard ---
         isFavorite={isFavorite}
-        onToggleFavorite={() => onToggleFavorite(item.id, isFavorite)}
+        // --- INI PERBAIKANNYA ---
+        // Cek dulu apakah onToggleFavorite ada (dikirim dari HomeScreen)
+        onToggleFavorite={
+          onToggleFavorite
+            ? () => onToggleFavorite(item.id, isFavorite)
+            : undefined // Jika tidak ada, kirim undefined (AMAN)
+        }
       />
     );
   };

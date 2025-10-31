@@ -1,8 +1,8 @@
 // src/features/Home/screens/HomeScreen.js
-
 import React, {
   useState,
-  useEffect, // <<< Pastikan useEffect di-import dari 'react'
+  useEffect,
+  useCallback, // Pastikan ini di-import
 } from 'react';
 import {
   StyleSheet,
@@ -11,7 +11,7 @@ import {
   ScrollView,
   View,
   Text,
-  Alert, // <<< Tambahkan Alert untuk error
+  Alert,
 } from 'react-native';
 
 import Header from '../components/Header';
@@ -21,28 +21,51 @@ import SectionHeader from '../../../components/common/SectionHeader';
 import HorizontalCardList from '../../../components/common/HorizontalCardList';
 import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentModal';
 
-// --- 1. IMPORT SUPABASE ---
+// --- IMPORT SUPABASE ---
 import { supabase } from '../../../services/supabaseClient';
 
+// --- Helper function untuk format data ---
+// (Kita letakkan di luar komponen agar tidak dibuat ulang)
+const formatMateriData = item => ({
+  ...item,
+  imageUrl: item.image_url,
+});
+
 const HomeScreen = ({ navigation }) => {
-  // --- 2. UBAH STATE DEFAULT ---
-  const [userName, setUserName] = useState('Memuat...'); // <<< Ganti jadi default loading
-  const [userLevel, setUserLevel] = useState(0); // <<< Ganti jadi default loading
-  const [userPoints, setUserPoints] = useState(0); // <<< Ganti jadi default loading
+  // State untuk User
+  const [userName, setUserName] = useState('Memuat...');
+  const [userLevel, setUserLevel] = useState(0);
+  const [userPoints, setUserPoints] = useState(0);
+  const [userId, setUserId] = useState(null);
+
+  // State untuk UI
   const [headerHeight, setHeaderHeight] = useState(0);
   const [isModalVisible, setModalVisible] = useState(false);
-
-  const [materiData, setMateriData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // --- 3. MODIFIKASI FUNGSI FETCH DATA ---
+  // --- State untuk Data Materi (Sudah Dipecah) ---
+  const [materiPopuler, setMateriPopuler] = useState([]);
+  const [materiBudaya, setMateriBudaya] = useState([]);
+  const [materiTokoh, setMateriTokoh] = useState([]);
+  const [materiSejarahLain, setMateriSejarahLain] = useState([]);
+
+  // State untuk Favorit
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
+
+  // --- FUNGSI FETCH DATA UTAMA ---
   useEffect(() => {
-    // Buat fungsi async di dalam useEffect
+    // Fungsi untuk memvalidasi hasil kueri
+    const validateQueryResult = (result, name) => {
+      // Abaikan error 406 untuk .single()
+      if (result.error && result.status !== 406) {
+        throw new Error(`Error ${name}: ${result.error.message}`);
+      }
+      return result.data;
+    };
+
     const fetchData = async () => {
       setLoading(true);
       try {
-        // --- A. AMBIL DATA USER YANG SEDANG LOGIN ---
-        // (Kita tahu ini ada karena App.tsx sudah memastikan session ada)
         const {
           data: { user },
           error: userError,
@@ -50,81 +73,152 @@ const HomeScreen = ({ navigation }) => {
         if (userError) throw new Error(`User Error: ${userError.message}`);
         if (!user) throw new Error('User tidak ditemukan (session null)');
 
-        // --- B. AMBIL DATA DARI TABEL PROFILES & MATERI ---
-        // Kita jalankan keduanya sekaligus
-        const [profileResult, materiResult] = await Promise.all([
-          // Query 1: Ambil profile
+        setUserId(user.id); // Simpan user ID
+
+        // --- Jalankan SEMUA kueri sekaligus ---
+        const [
+          profileResult,
+          populerResult,
+          budayaResult,
+          tokohResult,
+          sejarahLainResult,
+          favoritesResult,
+        ] = await Promise.all([
+          // 1. Profile
           supabase
             .from('profiles')
             .select('username, level, points')
             .eq('id', user.id)
             .single(),
-          // Query 2: Ambil materi
-          supabase.from('materi').select('*').limit(10),
+          // 2. Materi Populer (ID: Bebas, Urutkan berdasarkan 'likes')
+          supabase
+            .from('materi')
+            .select('*')
+            .order('likes', { ascending: false })
+            .limit(10),
+          // 3. Kebudayaan Daerah (ID: 2)
+          supabase.from('materi').select('*').eq('category_id', 2).limit(10),
+          // 4. Tokoh Nasional (ID: 3)
+          supabase.from('materi').select('*').eq('category_id', 3).limit(10),
+          // 5. Sejarah Lain (ID: 4)
+          supabase.from('materi').select('*').eq('category_id', 4).limit(10),
+          // 6. Favorit User
+          supabase
+            .from('user_favorites')
+            .select('materi_id')
+            .eq('user_id', user.id),
         ]);
 
-        // --- C. PROSES DATA PROFIL ---
-        if (profileResult.error) {
-          throw new Error(`Profile Error: ${profileResult.error.message}`);
-        }
-        if (profileResult.data) {
-          setUserName(profileResult.data.username);
-          setUserLevel(profileResult.data.level || 1); // Set 1 jika level null
-          setUserPoints(profileResult.data.points || 0);
-        }
+        // --- Validasi dan proses data ---
+        const profileData = validateQueryResult(profileResult, 'Profile');
+        const populerData = validateQueryResult(
+          populerResult,
+          'Materi Populer',
+        );
+        const budayaData = validateQueryResult(budayaResult, 'Materi Budaya');
+        const tokohData = validateQueryResult(tokohResult, 'Materi Tokoh');
+        const sejarahLainData = validateQueryResult(
+          sejarahLainResult,
+          'Materi Sejarah Lain',
+        );
+        const favoritesData = validateQueryResult(
+          favoritesResult,
+          'User Favorites',
+        );
 
-        // --- D. PROSES DATA MATERI ---
-        if (materiResult.error) {
-          throw new Error(`Materi Error: ${materiResult.error.message}`);
+        // Set state data
+        if (profileData) {
+          setUserName(profileData.username);
+          setUserLevel(profileData.level || 1);
+          setUserPoints(profileData.points || 0);
         }
-        if (materiResult.data) {
-          const formattedData = materiResult.data.map(item => ({
-            ...item,
-            imageUrl: item.image_url,
-          }));
-          setMateriData(formattedData);
+        if (populerData) {
+          setMateriPopuler(populerData.map(formatMateriData));
+        }
+        if (budayaData) {
+          setMateriBudaya(budayaData.map(formatMateriData));
+        }
+        if (tokohData) {
+          setMateriTokoh(tokohData.map(formatMateriData));
+        }
+        if (sejarahLainData) {
+          setMateriSejarahLain(sejarahLainData.map(formatMateriData));
+        }
+        if (favoritesData) {
+          const favSet = new Set(favoritesData.map(fav => fav.materi_id));
+          setFavoriteIds(favSet);
         }
       } catch (error) {
         console.error('Error fetching data HomeScreen:', error.message);
         Alert.alert('Gagal Memuat Data', error.message);
       } finally {
-        setLoading(false); // Apapun yang terjadi, stop loading
+        setLoading(false);
       }
     };
 
-    fetchData(); // Panggil fungsi saat komponen dimuat
+    fetchData();
   }, []); // [] = Jalankan sekali saat load
 
-  // --- Sisa fungsi (layout, modal, navigasi) biarkan sama ---
-  const handleSeeAllSejarah = () => console.log('Lihat Semua Sejarah');
-  const handleSeeAllBudaya = () => console.log('Lihat Semua Budaya');
+  // --- FUNGSI FAVORIT ---
+  const handleToggleFavorite = useCallback(
+    async (materiId, isCurrentlyFavorite) => {
+      if (!userId) return;
 
+      const newFavoriteIds = new Set(favoriteIds);
+      if (isCurrentlyFavorite) {
+        newFavoriteIds.delete(materiId);
+      } else {
+        newFavoriteIds.add(materiId);
+      }
+      setFavoriteIds(newFavoriteIds);
+
+      try {
+        if (isCurrentlyFavorite) {
+          const { error } = await supabase
+            .from('user_favorites')
+            .delete()
+            .match({ user_id: userId, materi_id: materiId });
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('user_favorites')
+            .insert({ user_id: userId, materi_id: materiId });
+          if (error) throw error;
+        }
+      } catch (error) {
+        console.error('Error toggling favorite:', error.message);
+        setFavoriteIds(favoriteIds); // Rollback
+        Alert.alert('Gagal', 'Gagal memperbarui favorit.');
+      }
+    },
+    [userId, favoriteIds],
+  );
+
+  // --- Handlers untuk "See All" ---
+  const handleSeeAllPopuler = () => console.log('Lihat Semua Materi Populer');
+  const handleSeeAllBudaya = () => console.log('Lihat Semua Budaya');
+  const handleSeeAllTokoh = () => console.log('Lihat Semua Tokoh Nasional');
+  const handleSeeAllSejarahLain = () =>
+    console.log('Lihat Semua Sejarah yg Tdk Diketahui');
+
+  // --- Handlers untuk UI ---
   const onHeaderLayout = event => {
     const { height } = event.nativeEvent.layout;
     if (height > 0 && height !== headerHeight) {
       setHeaderHeight(height);
     }
   };
-
   const searchBarTopPosition = headerHeight > 0 ? headerHeight - 60 / 2 : -999;
   const openModal = () => setModalVisible(true);
   const closeModal = () => setModalVisible(false);
-
   const handleQuickAction = actionId => {
-    console.log('HomeScreen received action:', actionId);
-    if (actionId === 'peta') {
-      openModal();
-    } else if (actionId === 'quiz') {
-      navigation.navigate('QuizList');
-    } else if (actionId === 'market') {
-      navigation.navigate('MarketPlace');
-    } else if (actionId === 'diskusi') {
-      navigation.navigate('DiscussionChoice');
-    } else {
-      console.log('Navigate to feature:', actionId);
-    }
+    if (actionId === 'peta') openModal();
+    else if (actionId === 'quiz') navigation.navigate('QuizList');
+    else if (actionId === 'market') navigation.navigate('MarketPlace');
+    else if (actionId === 'diskusi') navigation.navigate('DiscussionChoice');
   };
 
+  // --- Fungsi Render ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar
@@ -132,14 +226,13 @@ const HomeScreen = ({ navigation }) => {
         backgroundColor="#4A2F2F"
         translucent={false}
       />
-      {/* --- 4. HEADER SEKARANG DINAMIS --- */}
       <Header
         userName={userName}
         level={userLevel}
         points={userPoints}
         onNotificationPress={() => navigation.navigate('Notifications')}
         onLayout={onHeaderLayout}
-        navigation={navigation} // <<< Pastikan 'navigation' dikirim ke Header jika Header punya tombol Logout/Drawer
+        navigation={navigation}
       />
 
       {headerHeight > 0 && (
@@ -158,34 +251,66 @@ const HomeScreen = ({ navigation }) => {
       >
         <QuickActions onActionPress={handleQuickAction} />
 
+        {/* --- 1. MATERI POPULER --- */}
         <SectionHeader
           title="Materi Populer"
-          onSeeAllPress={handleSeeAllSejarah}
+          onSeeAllPress={handleSeeAllPopuler}
         />
-
-        {/* Logika Loading (Tetap sama) */}
         {loading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Memuat...</Text>
           </View>
         ) : (
           <HorizontalCardList
-            data={materiData} // Data dari state
+            data={materiPopuler}
             onCardPress={item =>
               navigation.navigate('MateriDetail', { materiId: item.id })
             }
+            favoriteMateriIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
 
+        {/* --- 2. KEBUDAYAAN DAERAH (ID: 2) --- */}
         <SectionHeader
           title="Kebudayaan Daerah"
           onSeeAllPress={handleSeeAllBudaya}
         />
         <HorizontalCardList
-          data={[]} // Kosongkan dulu
+          data={materiBudaya}
           onCardPress={item =>
             navigation.navigate('MateriDetail', { materiId: item.id })
           }
+          favoriteMateriIds={favoriteIds}
+          onToggleFavorite={handleToggleFavorite}
+        />
+
+        {/* --- 3. TOKOH NASIONAL (ID: 3) --- */}
+        <SectionHeader
+          title="Tokoh Nasional"
+          onSeeAllPress={handleSeeAllTokoh}
+        />
+        <HorizontalCardList
+          data={materiTokoh}
+          onCardPress={item =>
+            navigation.navigate('MateriDetail', { materiId: item.id })
+          }
+          favoriteMateriIds={favoriteIds}
+          onToggleFavorite={handleToggleFavorite}
+        />
+
+        {/* --- 4. SEJARAH YANG TIDAK DIKETAHUI (ID: 4) --- */}
+        <SectionHeader
+          title="Sejarah yang Tidak Diketahui"
+          onSeeAllPress={handleSeeAllSejarahLain}
+        />
+        <HorizontalCardList
+          data={materiSejarahLain}
+          onCardPress={item =>
+            navigation.navigate('MateriDetail', { materiId: item.id })
+          }
+          favoriteMateriIds={favoriteIds}
+          onToggleFavorite={handleToggleFavorite}
         />
       </ScrollView>
       <UnderDevelopmentModal isVisible={isModalVisible} onClose={closeModal} />
