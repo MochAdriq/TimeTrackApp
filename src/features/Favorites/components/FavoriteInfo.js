@@ -38,10 +38,6 @@ const FavoriteInfo = ({ userName = 'Alka Azzahra', onSearch }) => {
 
         {/* --- SearchBar di bawah teks --- */}
         {/* Beri wrapper untuk styling jika perlu */}
-        <View style={styles.searchWrapper}>
-          {/* Berikan prop onSearch */}
-          <SearchBar onSearch={onSearch} />
-        </View>
       </View>
 
       {/* --- Blok Kanan (Foto Profil) --- */}

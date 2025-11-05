@@ -32,6 +32,7 @@ import ChatScreen from '../features/Discussion/screens/ChatScreen';
 import NotificationScreen from '../features/Notification/screens/NotificationScreen';
 import FavoriteScreen from '../features/Favorites/screens/FavoriteScreen';
 import ChangePasswordScreen from '../features/Profiles/screens/ChangePasswordScreen';
+import DeveloperScreen from '../screens/DeveloperScreen';
 
 const RootStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
@@ -127,6 +128,10 @@ const AppNavigator = ({ session }) => {
               component={CommunityGroupListScreen}
             />
             <RootStack.Screen name="ChatScreen" component={ChatScreen} />
+            <RootStack.Screen
+              name="DeveloperScreen"
+              component={DeveloperScreen}
+            />
           </RootStack.Group>
         ) : (
           // --- GRUP LAYAR JIKA BELUM LOGIN ---

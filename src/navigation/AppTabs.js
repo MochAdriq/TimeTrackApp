@@ -6,13 +6,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // Import Ikon TIDAK DIPERLUKAN LAGI DI SINI
 // Import Screens
 import HomeScreen from '../features/Home/screens/HomeScreen';
-import PlaceholderScreen from '../screens/PlaceHolderScreen';
 
 // --- Import Custom Tab Bar ---
 import CustomTabBar from './CustomTabBar'; // <<<--- IMPORT
 import FavoriteScreen from '../features/Favorites/screens/FavoriteScreen';
 import ProfileScreen from '../features/Profiles/screens/ProfileScreen';
 import PremiumScreen from '../features/Premium/screens/PremiumScreen';
+import DeveloperScreen from '../screens/DeveloperScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -28,7 +28,7 @@ const AppTabs = () => {
       }}
     >
       {/* Daftarkan layar (tetap sama) */}
-      <Tab.Screen name="Scan" component={PlaceholderScreen} />
+      <Tab.Screen name="Scan" component={DeveloperScreen} />
       <Tab.Screen name="Favorites" component={FavoriteScreen} />
       <Tab.Screen name="Jelajah" component={HomeScreen} />
       <Tab.Screen name="Premium" component={PremiumScreen} />

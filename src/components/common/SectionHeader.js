@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', // Tengah secara vertikal
     paddingHorizontal: 15, // Padding samping
     marginTop: 25, // Jarak dari komponen di atasnya (QuickActions)
-    marginBottom: 15, // Jarak ke daftar item di bawahnya
+    marginBottom: -19, // Jarak ke daftar item di bawahnya
   },
   title: {
     fontSize: 18, // Ukuran font judul section

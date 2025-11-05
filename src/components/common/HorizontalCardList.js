@@ -36,14 +36,25 @@ const HorizontalCardList = ({
 
   return (
     <View style={{ marginVertical: 10 }}>
-      <SectionHeader title={title} onSeeAllPress={onSeeAllPress} />
+      <View style={{ zIndex: 1 }}>
+        <SectionHeader title={title} onSeeAllPress={onSeeAllPress} />
+      </View>
       <FlatList
         data={data}
         renderItem={renderItem}
         keyExtractor={item => item.id.toString()}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingLeft: 15, paddingRight: 5 }} // Padding list
+        removeClippedSubviews={false}
+        style={{
+          zIndex: 10, // Tetap di lapisan atas
+          overflow: 'visible', // Izinkan konten (bayangan) render di luar batas
+        }}
+        contentContainerStyle={{
+          paddingLeft: 15,
+          paddingRight: 5,
+          paddingTop: 10, // Beri 10px ruang di atas card untuk bayangan
+        }}
       />
     </View>
   );

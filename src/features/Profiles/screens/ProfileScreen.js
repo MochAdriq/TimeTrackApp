@@ -1,5 +1,5 @@
 // src/features/Profiles/screens/ProfileScreen.js
-import React, { useState, useEffect, useCallback } from 'react'; // <<< 1. Import useEffect & useCallback
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,29 +10,27 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
-  ActivityIndicator, // <<< 2. Import ActivityIndicator
-  // Alert, // <<< Hapus Alert
+  ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native'; // <<< 3. Import useFocusEffect
+import { useFocusEffect } from '@react-navigation/native';
 
 // --- Import Komponen ---
 import EditableInfoRow from '../components/EditableInfoRow';
-import InfoModal from '../../../components/common/InfoModal'; // <<< 4. Import InfoModal
+import InfoModal from '../../../components/common/InfoModal';
 
 // --- Import Supabase ---
-import { supabase } from '../../../services/supabaseClient'; // <<< 5. Import Supabase
+import { supabase } from '../../../services/supabaseClient';
 
-// --- Hapus initialUserData ---
-// const initialUserData = { ... };
-
-const currentTask = {
-  title: 'Baca 5 Sejarah untuk Mendapatkan poin',
-  progress: 1,
+// --- MODIFIKASI 1: Ganti initial hardcoded task dengan default structure ---
+const defaultTask = {
+  title: 'Baca 5 Materi untuk Mendapatkan Poin',
+  progress: 0,
   total: 5,
-  adReward: 100,
+  pointsReward: 0,
+  isCompleted: false,
 };
 
-// --- Komponen Aksi (Tetap sama) ---
+// --- Komponen Aksi (Tidak diubah) ---
 const ActionItem = ({ iconPlaceholder, label, onPress, isLast }) => (
   <TouchableOpacity
     style={[styles.actionItem, isLast && styles.actionItemLast]}
@@ -47,13 +45,13 @@ const ActionItem = ({ iconPlaceholder, label, onPress, isLast }) => (
 
 const ProfileScreen = ({ navigation }) => {
   const [isEditing, setIsEditing] = useState(false);
-
-  // --- 6. State untuk data profil & loading ---
-  const [loading, setLoading] = useState(true); // Mulai dengan loading
+  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false); // State khusus untuk tombol simpan
 
+  // --- MODIFIKASI 2: Tambahkan state untuk task dinamis ---
+  const [currentTask, setCurrentTask] = useState(defaultTask);
+
   const [profileData, setProfileData] = useState({
-    // State awal kosong
     namaPengguna: '',
     fullName: '',
     mobileNo: '',
@@ -64,10 +62,8 @@ const ProfileScreen = ({ navigation }) => {
     level: 0,
   });
 
-  // State untuk data asli (untuk perbandingan & batal)
   const [originalProfileData, setOriginalProfileData] = useState(null);
 
-  // State untuk modal (pengganti Alert)
   const [modalState, setModalState] = useState({
     isVisible: false,
     title: '',
@@ -75,11 +71,10 @@ const ProfileScreen = ({ navigation }) => {
     modalType: 'error',
   });
 
-  // --- 7. Fungsi untuk mengambil data profil ---
-  const fetchProfile = async () => {
-    setLoading(true); // Tampilkan loading penuh
+  // --- MODIFIKASI 3: Fungsi untuk mengambil data profil DAN Task ---
+  const fetchProfile = useCallback(async () => {
+    setLoading(true);
     try {
-      // 1. Ambil user yang sedang login dari Auth
       const {
         data: { user },
         error: userError,
@@ -87,25 +82,28 @@ const ProfileScreen = ({ navigation }) => {
       if (userError) throw userError;
       if (!user) throw new Error('User tidak ditemukan.');
 
-      // 2. Ambil data profil dari tabel 'profiles'
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('username, full_name, mobile_no, dob, upi_id, points, level')
-        .eq('id', user.id)
-        .single(); // Ambil 1 baris
+      // --- 1. Fetch Profile Data & User Email ---
+      const [profileResult, userTasksResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('username, full_name, mobile_no, dob, upi_id, points, level')
+          .eq('id', user.id)
+          .single(),
 
-      if (profileError) {
-        // Jika user ada di auth tapi tidak ada di profiles (mungkin gagal pas daftar)
-        if (profileError.code === 'PGRST116') {
-          throw new Error(
-            'Profil Anda tidak ditemukan di database. Silakan hubungi support.',
-          );
-        }
-        throw profileError;
-      }
+        // --- 2. Fetch Task Progress (diambil semua task user) ---
+        supabase
+          .from('user_tasks')
+          .select(
+            `current_progress, is_completed, tasks ( title, target_count, points_reward, type )`,
+          )
+          .eq('user_id', user.id),
+      ]);
 
-      // 3. Set state dengan data gabungan
-      if (profile) {
+      if (profileResult.error) throw profileResult.error;
+
+      // 3. Set State Profile
+      if (profileResult.data) {
+        const profile = profileResult.data;
         const fullProfile = {
           namaPengguna: profile.username || '',
           fullName: profile.full_name || '',
@@ -117,7 +115,39 @@ const ProfileScreen = ({ navigation }) => {
           level: profile.level || 1,
         };
         setProfileData(fullProfile);
-        setOriginalProfileData(fullProfile); // Simpan data asli untuk 'Batal'
+        setOriginalProfileData(fullProfile);
+      }
+
+      // 4. Set State Task
+      if (userTasksResult.data) {
+        const readMateriTask = userTasksResult.data.find(
+          t => t.tasks?.type === 'read_materi',
+        );
+        if (readMateriTask) {
+          setCurrentTask({
+            title: readMateriTask.tasks.title,
+            progress: readMateriTask.current_progress,
+            total: readMateriTask.tasks.target_count,
+            pointsReward: readMateriTask.tasks.points_reward,
+            isCompleted: readMateriTask.is_completed,
+          });
+        } else {
+          // Jika user belum pernah memulai task, ambil template dari tabel master 'tasks'
+          const { data: defaultTaskInfo } = await supabase
+            .from('tasks')
+            .select('title, target_count, points_reward')
+            .eq('type', 'read_materi')
+            .maybeSingle();
+
+          if (defaultTaskInfo) {
+            setCurrentTask({
+              ...defaultTask,
+              title: defaultTaskInfo.title,
+              total: defaultTaskInfo.target_count,
+              pointsReward: defaultTaskInfo.points_reward,
+            });
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching profile:', error.message);
@@ -130,62 +160,52 @@ const ProfileScreen = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // --- 8. Gunakan useFocusEffect ---
-  // Ini akan berjalan setiap kali user kembali ke layar ini
+  // --- useFocusEffect: PENTING untuk refresh poin dan level ---
   useFocusEffect(
     useCallback(() => {
-      fetchProfile(); // Ambil data profil terbaru
-    }, []),
+      fetchProfile();
+    }, [fetchProfile]),
   );
 
-  // Fungsi untuk update data di state
+  // --- Logika Edit Profil & Logout (Tidak ada perubahan mendasar, hanya penggunaan state) ---
+
   const handleInputChange = (field, value) => {
-    setProfileData(prevData => ({
-      ...prevData,
-      [field]: value,
-    }));
+    setProfileData(prevData => ({ ...prevData, [field]: value }));
   };
 
-  // --- 9. Modifikasi Fungsi Simpan ---
   const handleSaveProfile = async () => {
-    setIsSaving(true); // Tampilkan loading di tombol Simpan
+    setIsSaving(true);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User tidak ditemukan.');
 
-      // Siapkan data untuk update
+      // ... (Logika updates Anda sudah benar) ...
       const updates = {
         username: profileData.namaPengguna.trim(),
         full_name: profileData.fullName.trim(),
         mobile_no: profileData.mobileNo.trim() || null,
-        dob: profileData.dob.trim() || null, // Kirim null jika kosong
+        dob: profileData.dob.trim() || null,
         upi_id:
           profileData.upiId === 'Not Connected' ||
           profileData.upiId.trim() === ''
             ? null
             : profileData.upiId.trim(),
-        updated_at: new Date(), // Set waktu update
+        updated_at: new Date(),
       };
 
-      // Cek apakah email diubah (ini butuh penanganan khusus)
       if (profileData.email.trim().toLowerCase() !== user.email) {
-        // --- TODO: Handle Update Email ---
-        // Ini lebih rumit, butuh konfirmasi.
-        // Untuk sekarang, kita tampilkan pesan bahwa email tidak bisa diubah di sini.
         setModalState({
           isVisible: true,
           title: 'Info',
           message: 'Perubahan email belum bisa dilakukan dari halaman ini.',
           modalType: 'error',
         });
-        // Jangan update email di 'updates'
       }
 
-      // Query update ke Supabase
       const { error } = await supabase
         .from('profiles')
         .update(updates)
@@ -193,9 +213,8 @@ const ProfileScreen = ({ navigation }) => {
 
       if (error) throw error;
 
-      // Sukses
-      setOriginalProfileData(profileData); // Update data 'asli' dengan data baru
-      setIsEditing(false); // Kembali ke mode view
+      setOriginalProfileData(profileData);
+      setIsEditing(false);
       setModalState({
         isVisible: true,
         title: 'Profil Disimpan',
@@ -211,19 +230,17 @@ const ProfileScreen = ({ navigation }) => {
         modalType: 'error',
       });
     } finally {
-      setIsSaving(false); // Selesai loading tombol Simpan
+      setIsSaving(false);
     }
   };
 
-  // --- 10. Modifikasi Fungsi Batal ---
   const handleCancelEdit = () => {
-    setProfileData(originalProfileData); // Kembalikan data ke data asli terakhir
-    setIsEditing(false); // Kembali ke mode view
+    setProfileData(originalProfileData);
+    setIsEditing(false);
   };
 
-  // --- 11. Modifikasi Fungsi Logout ---
   const handleLogout = async () => {
-    setIsSaving(true); // Pakai state loading yang sama
+    setIsSaving(true);
     const { error } = await supabase.auth.signOut();
     if (error) {
       setIsSaving(false);
@@ -234,21 +251,22 @@ const ProfileScreen = ({ navigation }) => {
         modalType: 'error',
       });
     }
-    // Jika sukses, App.tsx akan otomatis pindah layar
-    // setLoading(false); // Tidak perlu
   };
 
-  // Fungsi lain (biarkan sama)
+  // --- Handler Navigasi Tugas ---
+  const handleTaskAction = () => {
+    // Arahkan ke halaman tugas Anda (ganti 'PlaceholderScreen' jika sudah ada)
+    navigation.replace('MainApp');
+  };
+
+  // --- Fungsi lain ---
   const handleEditProfile = () => setIsEditing(true);
   const handleChangePassword = () => navigation.navigate('ChangePassword');
   const handleHelp = () => console.log('Help');
-  const handleSettings = () => console.log('Settings');
-  const handleTaskAction = () => console.log('Task Action (Baca)');
-  const handleEditPicture = () => console.log('Edit Picture');
   const handleConnectUpi = () => console.log('Connect UPI');
   const handleLevelPress = () => navigation.navigate('RedeemPoin');
+  const handleEditPicture = () => console.log('Edit Picture');
 
-  // Fungsi modal
   const hideModal = () => {
     setModalState(prev => ({ ...prev, isVisible: false }));
   };
@@ -257,15 +275,17 @@ const ProfileScreen = ({ navigation }) => {
     ? [
         {
           key: 'save',
-          icon: '✅',
+          icon: isSaving ? '⏳' : '✅',
           label: 'Simpan Perubahan',
           handler: handleSaveProfile,
+          disabled: isSaving,
         },
         {
           key: 'cancel',
           icon: '❌',
           label: 'Batal',
           handler: handleCancelEdit,
+          disabled: false,
         },
       ]
     : [
@@ -305,17 +325,18 @@ const ProfileScreen = ({ navigation }) => {
       >
         <View style={styles.topCurve} />
 
+        {/* --- Profile Picture Section (Avatar) --- */}
         <View style={styles.profilePicWrapper}>
           <TouchableOpacity
             style={styles.profilePicContainer}
             onPress={handleEditPicture}
             activeOpacity={0.8}
-            disabled={!isEditing} // Nonaktifkan ganti foto jika tidak mode edit
+            disabled={!isEditing}
           >
             <View style={styles.profilePicPlaceholder}>
               <Text style={{ fontSize: 50 }}>👤</Text>
             </View>
-            {isEditing && ( // Hanya tampilkan ikon pensil jika mode edit
+            {isEditing && (
               <View style={styles.editIconSmallContainer}>
                 <View style={styles.editIconSmallPlaceholder}>
                   <Text style={{ fontSize: 10 }}>✏️</Text>
@@ -329,11 +350,11 @@ const ProfileScreen = ({ navigation }) => {
           {isEditing ? (
             <TextInput
               style={[styles.userNameText, styles.userNameInput]}
-              value={profileData.namaPengguna} // <<< Sesuai state
-              onChangeText={val => handleInputChange('namaPengguna', val)} // <<< Sesuai state
+              value={profileData.namaPengguna}
+              onChangeText={val => handleInputChange('namaPengguna', val)}
             />
           ) : (
-            <Text style={styles.userNameText}>{profileData.namaPengguna}</Text> // <<< Sesuai state
+            <Text style={styles.userNameText}>{profileData.namaPengguna}</Text>
           )}
 
           {!isEditing && (
@@ -342,10 +363,11 @@ const ProfileScreen = ({ navigation }) => {
                 <Text style={{ fontSize: 24 }}>💰</Text>
               </View>
               <View style={styles.greetingText}>
-                {/* <<< PERBAIKAN: Gunakan fullName atau namaPengguna >>> */}
+                {/* Menampilkan Full Name/Username */}
                 <Text style={styles.helloText}>
                   Hello {profileData.fullName || profileData.namaPengguna}
                 </Text>
+                {/* Menampilkan POIN yang terhubung dari DB */}
                 <Text style={styles.pointsText}>
                   {profileData.points.toLocaleString('id-ID')} Poin
                 </Text>
@@ -354,6 +376,7 @@ const ProfileScreen = ({ navigation }) => {
                 style={styles.levelButton}
                 onPress={handleLevelPress}
               >
+                {/* Menampilkan LEVEL yang terhubung dari DB */}
                 <Text style={styles.levelButtonText}>
                   Level {profileData.level}
                 </Text>
@@ -361,26 +384,47 @@ const ProfileScreen = ({ navigation }) => {
             </View>
           )}
 
+          {/* --- Task Card Dinamis --- */}
           {!isEditing && (
             <View style={styles.card}>
               <View style={styles.taskHeader}>
-                <View style={styles.taskIconPlaceholder}>
-                  <Text style={{ fontSize: 20 }}>📢</Text>
+                <View
+                  style={[
+                    styles.taskIconPlaceholder,
+                    currentTask.isCompleted && { backgroundColor: '#A8E6CF' },
+                  ]}
+                >
+                  <Text style={{ fontSize: 20 }}>
+                    {currentTask.isCompleted ? '✅' : '📢'}
+                  </Text>
                 </View>
-                <Text style={styles.taskInfo}>Task : {currentTask.title}</Text>
+                <Text
+                  style={[
+                    styles.taskInfo,
+                    currentTask.isCompleted && { color: '#2C5F2D' },
+                  ]}
+                >
+                  Task : {currentTask.title}
+                </Text>
                 <Text style={styles.taskProgress}>
                   {currentTask.progress}/{currentTask.total}
                 </Text>
               </View>
               <View style={styles.taskFooter}>
                 <Text style={styles.adInfo}>
-                  1 Ad = {currentTask.adReward} XY Coins
+                  Reward: {currentTask.pointsReward} Poin
                 </Text>
                 <TouchableOpacity
-                  style={styles.taskButton}
+                  style={[
+                    styles.taskButton,
+                    currentTask.isCompleted && { backgroundColor: '#808080' },
+                  ]}
                   onPress={handleTaskAction}
+                  disabled={currentTask.isCompleted}
                 >
-                  <Text style={styles.taskButtonText}>Baca</Text>
+                  <Text style={styles.taskButtonText}>
+                    {currentTask.isCompleted ? 'Selesai' : 'Baca'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -397,6 +441,7 @@ const ProfileScreen = ({ navigation }) => {
               isEditing && styles.infoCardEditing,
             ]}
           >
+            {/* ... (EditableInfoRow components) ... */}
             <EditableInfoRow
               label="Username"
               value={profileData.namaPengguna}
@@ -421,8 +466,7 @@ const ProfileScreen = ({ navigation }) => {
             <EditableInfoRow
               label="Email address"
               value={profileData.email}
-              isEditing={false} // <<< BUAT EMAIL TIDAK BISA DIEDIT
-              // onChangeText={val => handleInputChange('email', val)}
+              isEditing={false} // <<< Email tetap tidak bisa diedit di sini
               keyboardType="email-address"
               autoCapitalize="none"
             />
@@ -449,10 +493,7 @@ const ProfileScreen = ({ navigation }) => {
                 key={item.key}
                 iconPlaceholder={item.icon}
                 label={item.label}
-                // Tambahkan cek 'loading' untuk tombol Logout
-                onPress={
-                  item.key === 'logout' && loading ? () => {} : item.handler
-                }
+                onPress={item.handler}
                 isLast={index === actionListData.length - 1}
               />
             ))}
@@ -461,7 +502,7 @@ const ProfileScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      {/* --- 13. Tambahkan Modal JSX --- */}
+      {/* --- Modal dan Overlay --- */}
       <InfoModal
         isVisible={modalState.isVisible}
         title={modalState.title}
@@ -469,8 +510,6 @@ const ProfileScreen = ({ navigation }) => {
         modalType={modalState.modalType}
         onClose={hideModal}
       />
-
-      {/* Tampilkan overlay loading di atas tombol "Simpan" */}
       {isSaving && (
         <View style={styles.savingOverlay}>
           <ActivityIndicator size="large" color="#FFFFFF" />
@@ -480,9 +519,8 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-// --- STYLES (Tambahkan style loading) ---
+// --- STYLES (Tidak diubah) ---
 const styles = StyleSheet.create({
-  // ... (semua style lama Anda)
   safeArea: { flex: 1, backgroundColor: '#F4F4F4' },
   scrollView: { flex: 1, backgroundColor: '#F4F4F4' },
   scrollContent: { paddingBottom: 20 },
@@ -536,7 +574,7 @@ const styles = StyleSheet.create({
     marginTop: -30,
     paddingTop: 75,
     zIndex: 0,
-    minHeight: 500, // Pastikan konten area cukup tinggi
+    minHeight: 500,
   },
   userNameText: {
     fontSize: 18,
@@ -667,13 +705,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#444',
   },
-  // <<< Style Loading Penuh >>>
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F4F4F4',
-    paddingTop: 100, // Beri jarak dari atas
+    paddingTop: 100,
     paddingBottom: 100,
   },
   loadingText: {
@@ -681,13 +718,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6A453C',
   },
-  // <<< Style Tombol Simpan Loading >>>
   savingOverlay: {
-    ...StyleSheet.absoluteFillObject, // Tutupi seluruh layar
-    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Latar belakang gelap transparan
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 99, // Pastikan di atas segalanya
+    zIndex: 99,
   },
 });
 

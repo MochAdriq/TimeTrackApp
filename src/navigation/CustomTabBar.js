@@ -22,13 +22,8 @@ import StarIconActive from '../assets/icon/StarIconActive.svg';
 import ProfileIconActive from '../assets/icon/ProfileIconActive.svg';
 
 // --- Constants ---
-const { width: screenWidth } = Dimensions.get('window');
-const tabBarPaddingHorizontal = 15; // Padding di tabBarContainer
-// Lebar area efektif untuk tab items (tanpa padding container)
-const effectiveTabBarWidth = screenWidth - tabBarPaddingHorizontal * 2;
 const numTabs = 5;
 // Lebar pasti per tab item
-const tabWidth = effectiveTabBarWidth / numTabs;
 const indicatorSize = 60; // Ukuran lingkaran
 const iconSize = 28; // Ukuran ikon samping
 const centerIconSize = 30; // Ukuran ikon tengah
@@ -37,7 +32,6 @@ const centerIconSize = 30; // Ukuran ikon tengah
 const inactiveColor = '#FFFFFF'; // Warna ikon inactive (putih outline)
 const tabBarBackgroundColor = '#6A453C';
 const activeCircleColor = '#FFFFFF';
-const activeIconColor = tabBarBackgroundColor; // Warna ikon aktif (coklat fill)
 
 // Map nama route ke komponen ikon AKTIF dan INACTIVE
 const iconComponents = {

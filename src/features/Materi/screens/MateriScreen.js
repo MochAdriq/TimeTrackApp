@@ -1,5 +1,5 @@
 // src/features/Materi/screens/MateriScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,87 +8,255 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
-  Image, // Untuk gambar utama dan video thumbnail
+  Image,
+  ActivityIndicator, // Untuk indikator loading
 } from 'react-native';
-// Import ikon (ganti path/nama)
-// import BackArrowIcon from '../../../assets/icons/BackArrowIcon.svg';
-// import HeartIcon from '../../../assets/icons/HeartIcon.svg'; // Outline heart
+import { supabase } from '../../../services/supabaseClient'; // Import Supabase
+import InfoModal from '../../../components/common/InfoModal'; // Import InfoModal
+import LoveIconActive from '../../../assets/icon/LoveIconActive.svg'; // Import ikon Like
+import LoveIconInactive from '../../../assets/icon/LoveIconInactive.svg'; // Import ikon Unlike
+import { updateTaskProgress } from '../../../services/taskService';
+
+// (Ikon lain masih menggunakan placeholder teks karena tidak ditemukan di file Anda)
 // import PlayIcon from '../../../assets/icons/PlayIcon.svg';
 // import SpeakerIcon from '../../../assets/icons/SpeakerIcon.svg';
 
-// --- Fungsi untuk mendapatkan data materi (dummy) ---
-// Nanti ini diganti dengan fetch data asli berdasarkan ID
-const getMateriData = materiId => {
-  console.log('Fetching data for:', materiId);
-  // Contoh data dummy
-  if (materiId === 'sej1' || materiId === 'Kerajaan Islam') {
-    return {
-      title: 'Kerajaan Islam',
-      imageUrl:
-        'https://via.placeholder.com/400x250/A77C55/FFFFFF?text=Gambar+Utama+Kerajaan', // URL gambar utama
-      videoThumbnailUrl:
-        'https://via.placeholder.com/300x180/A77C55/FFFFFF?text=Video+Kerajaan', // URL thumbnail video
-      summary:
-        'Perkembangan kerajaan Islam seperti Samudra Pasai, Demak, Mataram Islam, hingga Ternate–Tidore, membawa kemajuan dakwah dan perdagangan.',
-      likes: 100,
-    };
-  } else if (materiId === 'bud1' || materiId === 'Wayang Kulit') {
-    return {
-      title: 'Wayang Kulit',
-      imageUrl:
-        'https://via.placeholder.com/400x250/E3D5B8/333333?text=Gambar+Wayang',
-      videoThumbnailUrl:
-        'https://via.placeholder.com/300x180/E3D5B8/333333?text=Video+Wayang',
-      summary:
-        'Wayang kulit adalah seni tradisional Indonesia yang terutama berkembang di Jawa. Wayang berasal dari kata Ma Hyang...',
-      likes: 150,
-    };
-  }
-  // Fallback jika ID tidak ditemukan
-  return {
-    title: 'Materi Tidak Ditemukan',
-    imageUrl: 'https://via.placeholder.com/400x250/CCCCCC/FFFFFF?text=Error',
-    videoThumbnailUrl: null,
-    summary: 'Data untuk materi ini tidak dapat ditemukan.',
-    likes: 0,
-  };
-};
-
 const MateriScreen = ({ route, navigation }) => {
-  // --- Ambil parameter ID/Title dari navigasi ---
-  const { materiId, materiTitle } = route.params; // Ambil ID atau Title
+  // --- Ambil parameter ID dari navigasi ---
+  const { materiId } = route.params;
 
-  // State untuk menyimpan data materi
+  // --- State untuk data, loading, dan favorit ---
   const [materi, setMateri] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [modalInfo, setModalInfo] = useState({
+    visible: false,
+    type: 'error',
+    title: '',
+    message: '',
+  });
 
-  // Efek untuk memuat data saat layar dibuka atau parameter berubah
+  const [hasTaskBeenTriggered, setHasTaskBeenTriggered] = useState(false);
+
+  // --- Fungsi untuk memuat data materi dan status favorit ---
+  const fetchMateriData = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      // 1. Ambil data user saat ini
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      // 2. Ambil data materi berdasarkan ID
+      const { data: materiData, error: materiError } = await supabase
+        .from('materi')
+        .select(
+          `
+          *,
+          categories ( name ),
+          user_favorites ( count )
+        `,
+        ) // <--- PERUBAHAN DI SINI
+        .eq('id', materiId)
+        .single();
+
+      if (materiError) {
+        throw new Error('Materi tidak ditemukan atau terjadi kesalahan.');
+      }
+
+      setMateri(materiData);
+
+      // 3. Cek status favorit (hanya jika user login)
+      if (user && materiData) {
+        const { data: favoriteData, error: favoriteError } = await supabase
+          .from('user_favorites')
+          .select('user_id')
+          .eq('user_id', user.id)
+          .eq('materi_id', materiData.id)
+          .maybeSingle(); // maybeSingle() tidak error jika tidak ada row
+
+        if (favoriteError) {
+          console.error('Gagal mengecek favorit:', favoriteError.message);
+        }
+
+        if (favoriteData) {
+          setIsFavorite(true);
+        } else {
+          setIsFavorite(false);
+        }
+      }
+    } catch (error) {
+      setModalInfo({
+        visible: true,
+        type: 'error',
+        title: 'Gagal Memuat',
+        message: error.message,
+      });
+      setMateri(null); // Pastikan tidak ada data materi lama
+    } finally {
+      setLoading(false);
+    }
+  }, [materiId]); // Dependensi pada materiId
+
+  // --- Efek untuk memuat data saat layar dibuka ---
   useEffect(() => {
-    // Gunakan ID atau Title untuk memuat data
-    const data = getMateriData(materiId || materiTitle);
-    setMateri(data);
-  }, [materiId, materiTitle]); // Jalankan ulang jika parameter berubah
+    if (materiId) {
+      fetchMateriData();
+    }
+  }, [materiId, fetchMateriData]); // Jalankan ulang jika ID berubah
 
-  // Handler untuk tombol
-  const handleLike = () => console.log('Like pressed');
-  const handlePlayVideo = () => console.log('Play video');
-  const handlePlayAudio = () => console.log('Play audio explanation');
+  // --- Handler untuk tombol Like/Unlike ---
+  const handleLike = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  // Tampilkan loading atau fallback jika data belum siap
-  if (!materi) {
+    // Cek jika user belum login
+    if (!user) {
+      setModalInfo({
+        visible: true,
+        type: 'info',
+        title: 'Login Dibutuhkan',
+        message: 'Anda harus login untuk menambahkan materi ke favorit.',
+      });
+      return;
+    }
+
+    const newFavoriteStatus = !isFavorite;
+    // Optimistic UI update
+    setIsFavorite(newFavoriteStatus);
+
+    try {
+      if (newFavoriteStatus) {
+        // --- Tambahkan ke favorit ---
+        const { error } = await supabase
+          .from('user_favorites')
+          .insert({ user_id: user.id, materi_id: materi.id });
+        if (error) throw error;
+      } else {
+        // --- Hapus dari favorit ---
+        const { error } = await supabase
+          .from('user_favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('materi_id', materi.id);
+        if (error) throw error;
+      }
+    } catch (error) {
+      // Rollback jika terjadi error
+      setIsFavorite(!newFavoriteStatus);
+      setModalInfo({
+        visible: true,
+        type: 'error',
+        title: 'Update Gagal',
+        message: 'Gagal memperbarui status favorit. Coba lagi.',
+      });
+    }
+  };
+
+  // --- Handler placeholder (belum diubah) ---
+  const handlePlayVideo = () =>
+    console.log('Play video', materi?.video_url || 'Tidak ada video');
+  const handlePlayAudio = () =>
+    console.log('Play audio', materi?.audio_url || 'Tidak ada audio');
+
+  // --- Handler untuk menutup modal ---
+  const closeModal = () => {
+    setModalInfo(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleCompleteReadTask = useCallback(async () => {
+    try {
+      // Panggil service, tentukan tipe task-nya 'read_materi'
+      const completedTask = await updateTaskProgress('read_materi');
+
+      // Jika fungsi mengembalikan data, berarti task baru saja selesai
+      if (completedTask) {
+        setModalInfo({
+          visible: true,
+          type: 'success', // Ganti tipe modal menjadi 'success'
+          title: 'Tugas Selesai!',
+          message: `Anda telah menyelesaikan tugas "${completedTask.title}" dan mendapatkan ${completedTask.points_reward} poin!`,
+        });
+      }
+    } catch (error) {
+      // Tidak perlu menampilkan error ke user untuk task
+      console.error('Gagal memicu task:', error.message);
+    }
+  }, []);
+
+  const handleScroll = event => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+
+    // Offset 20px agar trigger sedikit sebelum akhir
+    const isCloseToBottom =
+      layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
+
+    // Jika sudah di bawah DAN belum pernah di-trigger DAN tidak loading
+    if (isCloseToBottom && !loading && !hasTaskBeenTriggered) {
+      // 1. Tandai bahwa task sudah di-trigger
+      setHasTaskBeenTriggered(true);
+
+      // 2. Panggil fungsi untuk update task
+      handleCompleteReadTask();
+    }
+  };
+
+  // --- Tampilan Loading ---
+  if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
-          <Text>Loading...</Text>
+          <ActivityIndicator size="large" color="#6A453C" />
+          <Text style={{ marginTop: 10, color: '#6A453C' }}>
+            Memuat Materi...
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Ambil data dari state 'materi'
-  const { title, imageUrl, videoThumbnailUrl, summary, likes } = materi;
-  const imageSource = imageUrl ? { uri: imageUrl } : null;
-  const videoThumbSource = videoThumbnailUrl
-    ? { uri: videoThumbnailUrl }
+  // --- Tampilan Jika Materi Tidak Ditemukan ---
+  if (!materi) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header tetap ada agar bisa kembali */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <View style={styles.backIconPlaceholder}>
+              <Text style={{ color: '#fff', fontSize: 20 }}>{'<'}</Text>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Error
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={{ fontSize: 16, color: '#333' }}>
+            Materi tidak dapat ditemukan.
+          </Text>
+        </View>
+        <InfoModal
+          visible={modalInfo.visible}
+          title={modalInfo.title}
+          message={modalInfo.message}
+          type={modalInfo.type}
+          onClose={closeModal}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // --- Ambil data dari state 'materi' (setelah loading) ---
+  const { title, image_url, video_thumbnail_url, summary, likes } = materi;
+  const imageSource = image_url ? { uri: image_url } : null;
+  const videoThumbSource = video_thumbnail_url
+    ? { uri: video_thumbnail_url }
     : null;
 
   return (
@@ -103,15 +271,18 @@ const MateriScreen = ({ route, navigation }) => {
           <View style={styles.backIconPlaceholder}>
             <Text style={{ color: '#fff', fontSize: 20 }}>{'<'}</Text>
           </View>
-          {/* <BackArrowIcon width={24} height={24} fill="#FFF" /> */}
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {title}
         </Text>
-        <View style={{ width: 40 }} /> {/* Spacer */}
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         {/* Gambar Utama dengan Tombol Like */}
         {imageSource && (
           <View style={styles.imageContainer}>
@@ -121,12 +292,15 @@ const MateriScreen = ({ route, navigation }) => {
               resizeMode="cover"
             />
             <TouchableOpacity style={styles.likeButton} onPress={handleLike}>
-              <Text style={styles.likeCount}>{likes}</Text>
-              {/* Ganti View dengan ikon hati */}
-              <View style={styles.likeIconPlaceholder}>
-                <Text>♡</Text>
-              </View>
-              {/* <HeartIcon width={18} height={18} stroke="#FFF" strokeWidth={2} /> */}
+              {/* Data 'likes' dari DB (jika Anda ingin menampilkannya) */}
+              {/* <Text style={styles.likeCount}>{likes}</Text> */}
+
+              {/* --- Ikon Hati Dinamis --- */}
+              {isFavorite ? (
+                <LoveIconActive width={22} height={22} />
+              ) : (
+                <LoveIconInactive width={22} height={22} />
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -146,15 +320,12 @@ const MateriScreen = ({ route, navigation }) => {
               style={styles.videoThumbnail}
               resizeMode="cover"
             />
-            {/* Ikon Play di tengah */}
             <View style={styles.playIconOverlay}>
-              {/* Ganti View dengan ikon play */}
               <View style={styles.playIconPlaceholder}>
                 <Text style={{ fontSize: 30, color: 'rgba(255,255,255,0.8)' }}>
                   ▶
                 </Text>
               </View>
-              {/* <PlayIcon width={40} height={40} fill="rgba(255, 255, 255, 0.8)" /> */}
             </View>
           </TouchableOpacity>
         )}
@@ -166,47 +337,62 @@ const MateriScreen = ({ route, navigation }) => {
         </View>
 
         {/* Interaktivitas (Audio) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Interaktivitas</Text>
-          <TouchableOpacity
-            style={styles.audioPlayer}
-            onPress={handlePlayAudio}
-          >
-            {/* Ganti View dengan ikon speaker */}
-            <View style={styles.audioIconPlaceholder}>
-              <Text style={{ fontSize: 20 }}>🔊</Text>
-            </View>
-            {/* <SpeakerIcon width={24} height={24} fill="#555" /> */}
-            <View style={styles.audioTextContainer}>
-              <Text style={styles.audioTitle}>
-                Dengar Untuk Penjelasan audio
-              </Text>
-              <Text style={styles.audioSubtitle}>
-                Penjelasan audio bergaya podcast...
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+        {/* Tambahkan cek jika materi.audio_url ada */}
+        {materi.audio_url && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Interaktivitas</Text>
+            <TouchableOpacity
+              style={styles.audioPlayer}
+              onPress={handlePlayAudio}
+            >
+              <View style={styles.audioIconPlaceholder}>
+                <Text style={{ fontSize: 20 }}>🔊</Text>
+              </View>
+              <View style={styles.audioTextContainer}>
+                <Text style={styles.audioTitle}>
+                  Dengar Untuk Penjelasan audio
+                </Text>
+                <Text style={styles.audioSubtitle}>
+                  Penjelasan audio bergaya podcast...
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Spacer Bawah */}
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* --- Pop Up Modal --- */}
+      <InfoModal
+        visible={modalInfo.visible}
+        title={modalInfo.title}
+        message={modalInfo.message}
+        type={modalInfo.type}
+        onClose={closeModal}
+      />
     </SafeAreaView>
   );
 };
 
-// --- STYLES (Contoh, sesuaikan!) ---
+// --- STYLES (Sama seperti yang Anda berikan, ditambah loadingContainer) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF', // Latar belakang putih saat loading
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
     paddingVertical: 12,
-    backgroundColor: '#6A453C', // Header coklat
-    height: 60, // Sesuaikan
+    backgroundColor: '#6A453C',
+    height: 60,
   },
   backButton: { padding: 5 },
   backIconPlaceholder: {
@@ -221,22 +407,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flexShrink: 1,
     marginHorizontal: 10,
-  }, // flexShrink agar judul tidak mendorong tombol
+  },
   scrollContainer: { paddingBottom: 20 },
-  imageContainer: { position: 'relative' }, // Untuk positioning tombol like
-  mainImage: { width: '100%', height: 250 }, // Sesuaikan tinggi gambar
+  imageContainer: { position: 'relative' },
+  mainImage: { width: '100%', height: 250 },
   likeButton: {
     position: 'absolute',
-    bottom: 10,
+    bottom: 12, // Disesuaikan agar lebih rapi
     right: 15,
-    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20, // Bulat sempurna
+    width: 40, // Ukuran tetap
+    height: 40,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Background semi-transparan
-    borderRadius: 15,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
   },
-  likeCount: { color: '#FFFFFF', fontSize: 12, marginRight: 5 },
+  // likeCount: { color: '#FFFFFF', fontSize: 12, marginRight: 5 }, // Dihapus sementara
   likeIconPlaceholder: {
     width: 18,
     height: 18,
@@ -256,19 +442,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 15,
     overflow: 'hidden',
-    backgroundColor: '#E0E0E0', // Fallback
+    backgroundColor: '#E0E0E0',
     justifyContent: 'center',
-    alignItems: 'center', // Untuk ikon play
+    alignItems: 'center',
     position: 'relative',
   },
-  videoThumbnail: { width: '100%', height: 180 }, // Sesuaikan tinggi thumbnail
+  videoThumbnail: { width: '100%', height: 180 },
   playIconOverlay: {
-    position: 'absolute', // Taruh di tengah thumbnail
+    position: 'absolute',
   },
   playIconPlaceholder: {
     backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 30,
-    padding: 10,
+    width: 60, // Perbesar sedikit
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   section: { marginHorizontal: 15, marginBottom: 20 },
   sectionTitle: {
@@ -281,7 +470,7 @@ const styles = StyleSheet.create({
   audioPlayer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5', // Background abu
+    backgroundColor: '#F5F5F5',
     padding: 15,
     borderRadius: 10,
     borderWidth: 1,
