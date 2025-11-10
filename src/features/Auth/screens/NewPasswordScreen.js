@@ -16,6 +16,7 @@ import InfoModal from '../../../components/common/InfoModal';
 import EyeOpenIcon from '../../../assets/icon/EyeOpenIcon.svg';
 import EyeClosedIcon from '../../../assets/icon/EyeClosedIcon.svg';
 
+// --- HAPUS 'navigation' DARI PROPS ---
 const NewPasswordScreen = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -83,9 +84,17 @@ const NewPasswordScreen = () => {
         message:
           'Password Anda telah berhasil diperbarui. Silakan login kembali dengan password baru Anda.',
         modalType: 'success',
+        // --- MODIFIKASI onClose (FINAL) ---
         onClose: async () => {
+          // 1. Panggil signOut()
           await supabase.auth.signOut();
-          // App.tsx akan mendeteksi SIGNED_OUT dan mengarahkan ke AuthNavigator
+
+          // 2. HENTIKAN LOADING (Memperbaiki bug 'muter doang')
+          setLoading(false);
+
+          // 3. HAPUS navigasi manual.
+          // App.tsx akan menangani navigasi otomatis
+          // saat mendeteksi session null.
         },
       });
     } catch (error) {
@@ -97,7 +106,7 @@ const NewPasswordScreen = () => {
         modalType: 'error',
       });
     }
-    // Jangan set loading false di sini jika sukses, biarkan modal yg handle
+    // Hapus 'setLoading(false)' dari sini
   };
 
   return (

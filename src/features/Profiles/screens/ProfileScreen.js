@@ -1,5 +1,4 @@
-// src/features/Profiles/screens/ProfileScreen.js
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,25 +8,23 @@ import {
   StatusBar,
   TouchableOpacity,
   Image,
-  TextInput,
   ActivityIndicator,
   RefreshControl,
   Alert,
-  PermissionsAndroid, // <<< 1. IMPORT UNTUK IZIN
-  Platform, // <<< 2. IMPORT UNTUK CEK OS
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import { decode } from 'base64-arraybuffer';
 
 // --- Import Komponen ---
 import EditableInfoRow from '../components/EditableInfoRow';
 import InfoModal from '../../../components/common/InfoModal';
 
-// --- Import Supabase ---
+// --- Import Context & Supabase ---
+import { useProfile } from '../../../context/ProfileContext';
 import { supabase } from '../../../services/supabaseClient';
 
-// --- Komponen Aksi (Desain Baru, Tanpa Library) ---
+// --- Komponen Aksi (ActionItem) ---
 const ActionItem = ({ icon, label, onPress, isLast, isLogout }) => (
   <TouchableOpacity
     style={[styles.actionItem, isLast && styles.actionItemLast]}
@@ -44,151 +41,80 @@ const ActionItem = ({ icon, label, onPress, isLast, isLogout }) => (
 );
 
 const ProfileScreen = ({ navigation }) => {
-  // ... (State tetap sama) ...
+  // --- 1. KONSUMSI DATA DARI CONTEXT ---
+  const {
+    profile: contextProfile,
+    currentTask,
+    loading: contextLoading,
+    isSaving,
+    fetchProfile,
+    saveProfile,
+    uploadAvatar,
+  } = useProfile(); // --- 2. STATE LOKAL HANYA UNTUK UI ---
+
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentTask, setCurrentTask] = useState({
-    title: 'Memuat task...',
-    progress: 0,
-    total: 1,
-    pointsReward: 0,
-    isCompleted: false,
-  });
-  const [profileData, setProfileData] = useState({
-    username: '...',
-    full_name: 'Memuat...',
-    mobile_no: '...',
-    email: '...',
-    dob: '...',
-    upi_id: '...',
-    points: 0,
-    level: 0,
-    avatar_url: null,
-  });
-  const [originalProfileData, setOriginalProfileData] = useState(null);
+  const [profileData, setProfileData] = useState(contextProfile); // Untuk form edit
+  const [originalProfileData, setOriginalProfileData] =
+    useState(contextProfile); // Untuk 'cancel'
   const [modalState, setModalState] = useState({
     isVisible: false,
     title: '',
     message: '',
     modalType: 'error',
   });
+  const [timeLeft, setTimeLeft] = useState('Memuat...'); // Untuk timer // --- 3. EFEK & FUNGSI --- // Efek untuk sinkronisasi data form dari context
 
-  // --- Fungsi Fetch Data (Tidak diubah) ---
-  const fetchProfile = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
+  useEffect(() => {
+    setProfileData(contextProfile);
+    setOriginalProfileData(contextProfile);
+  }, [contextProfile]); // Efek untuk Timer Countdown Tugas Harian
 
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error('User tidak ditemukan.');
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setDate(now.getDate() + 1);
+      midnight.setHours(0, 0, 0, 0); // Target: Besok jam 00:00:00
 
-      const [profileResult, userTasksResult] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select(
-            'username, full_name, mobile_no, dob, upi_id, points, level, avatar_url',
-          )
-          .eq('id', user.id)
-          .single(),
-        supabase
-          .from('user_tasks')
-          .select(
-            `current_progress, is_completed, tasks ( title, target_count, points_reward, type )`,
-          )
-          .eq('user_id', user.id)
-          .eq('tasks.type', 'read_materi')
-          .maybeSingle(),
-      ]);
+      const difference = midnight.getTime() - now.getTime();
 
-      if (profileResult.error) throw profileResult.error;
-
-      if (profileResult.data) {
-        const profile = profileResult.data;
-        const fullProfile = {
-          username: profile.username || 'Belum diatur',
-          full_name: profile.full_name || 'Belum diatur',
-          mobile_no: profile.mobile_no || '',
-          email: user.email || '',
-          dob: profile.dob || '',
-          upi_id: profile.upi_id || '',
-          points: profile.points || 0,
-          level: profile.level || 1,
-          avatar_url: profile.avatar_url,
-        };
-        setProfileData(fullProfile);
-        setOriginalProfileData(fullProfile);
-      }
-
-      if (userTasksResult.data) {
-        const readMateriTask = userTasksResult.data;
-        setCurrentTask({
-          title: readMateriTask.tasks.title,
-          progress: readMateriTask.current_progress,
-          total: readMateriTask.tasks.target_count,
-          pointsReward: readMateriTask.tasks.points_reward,
-          isCompleted: readMateriTask.is_completed,
-        });
+      if (difference > 0) {
+        const hours = Math.floor(difference / (1000 * 60 * 60))
+          .toString()
+          .padStart(2, '0');
+        const minutes = Math.floor(
+          (difference % (1000 * 60 * 60)) / (1000 * 60),
+        )
+          .toString()
+          .padStart(2, '0');
+        const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+          .toString()
+          .padStart(2, '0');
+        setTimeLeft(`${hours}:${minutes}:${seconds}`);
       } else {
-        const { data: defaultTaskInfo } = await supabase
-          .from('tasks')
-          .select('title, target_count, points_reward')
-          .eq('type', 'read_materi')
-          .maybeSingle();
-
-        if (defaultTaskInfo) {
-          setCurrentTask({
-            title: defaultTaskInfo.title,
-            progress: 0,
-            total: defaultTaskInfo.target_count,
-            pointsReward: defaultTaskInfo.points_reward,
-            isCompleted: false,
-          });
-        }
+        setTimeLeft('Mengatur ulang...');
       }
-    } catch (error) {
-      console.error('Error fetching profile:', error.message);
-      setModalState({
-        isVisible: true,
-        title: 'Gagal Memuat Profil',
-        message: error.message,
-        modalType: 'error',
-      });
-    } finally {
-      if (!isRefresh) setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchProfile(false);
-    }, [fetchProfile]),
-  );
+    calculateTimeLeft(); // Panggil sekali saat load
+    const timer = setInterval(calculateTimeLeft, 1000); // Update tiap detik
 
-  const onRefresh = useCallback(() => {
+    return () => clearInterval(timer); // Cleanup
+  }, []); // Fungsi Pull-to-Refresh
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    fetchProfile(true);
-  }, [fetchProfile]);
+    await fetchProfile(true); // Memanggil fetch dari context
+    setRefreshing(false);
+  }, [fetchProfile]); // --- 4. FUNGSI HANDLER ---
 
-  // --- Fungsi Simpan, Batal, Logout (Dengan perbaikan null-safe) ---
   const handleInputChange = (field, value) => {
     setProfileData(prevData => ({ ...prevData, [field]: value }));
-  };
+  }; // Menyimpan perubahan (memanggil context)
 
   const handleSaveProfile = async () => {
-    setIsSaving(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('User tidak ditemukan.');
-
-      // Perbaikan Null-safe .trim()
       const updates = {
         username: (profileData.username || '').trim(),
         full_name: (profileData.full_name || '').trim(),
@@ -198,16 +124,9 @@ const ProfileScreen = ({ navigation }) => {
         updated_at: new Date(),
       };
 
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user.id);
+      await saveProfile(updates); // Panggil fungsi context
 
-      if (error) throw error;
-
-      await fetchProfile(true);
       setIsEditing(false);
-
       setModalState({
         isVisible: true,
         title: 'Profil Disimpan',
@@ -215,28 +134,23 @@ const ProfileScreen = ({ navigation }) => {
         modalType: 'success',
       });
     } catch (error) {
-      console.error('Error saving profile:', error.message);
       setModalState({
         isVisible: true,
         title: 'Gagal Menyimpan',
         message: error.message,
         modalType: 'error',
       });
-    } finally {
-      setIsSaving(false);
     }
-  };
+  }; // Batal edit
 
   const handleCancelEdit = () => {
     setProfileData(originalProfileData);
     setIsEditing(false);
-  };
+  }; // Logout (tetap lokal)
 
   const handleLogout = async () => {
-    setIsSaving(true);
     const { error } = await supabase.auth.signOut();
     if (error) {
-      setIsSaving(false);
       setModalState({
         isVisible: true,
         title: 'Logout Gagal',
@@ -244,12 +158,10 @@ const ProfileScreen = ({ navigation }) => {
         modalType: 'error',
       });
     }
-  };
+  }; // --- 5. FUNGSI UPLOAD FOTO --- // Meminta izin (Android)
 
-  // --- <<< 3. FUNGSI UNTUK MINTA IZIN (FIX) >>> ---
   const requestPermission = async source => {
     if (Platform.OS !== 'android') return true;
-
     let permission;
     let title;
     let message;
@@ -257,36 +169,29 @@ const ProfileScreen = ({ navigation }) => {
     if (source === 'camera') {
       permission = PermissionsAndroid.PERMISSIONS.CAMERA;
       title = 'Izin Kamera';
-      message = 'TimeTrackApp membutuhkan izin untuk mengakses kamera Anda.';
+      message = 'Aplikasi membutuhkan izin untuk mengakses kamera Anda.';
     } else {
-      if (Platform.Version >= 33) {
-        permission = PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES;
-        title = 'Izin Galeri';
-        message = 'TimeTrackApp membutuhkan izin untuk mengakses foto Anda.';
-      } else {
-        permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
-        title = 'Izin Penyimpanan';
-        message = 'TimeTrackApp membutuhkan izin untuk membaca galeri Anda.';
-      }
+      permission =
+        Platform.Version >= 33
+          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
+          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      title = 'Izin Galeri';
+      message = 'Aplikasi membutuhkan izin untuk mengakses foto Anda.';
     }
 
     try {
-      // Periksa apakah izin sudah ada
       const hasPermission = await PermissionsAndroid.check(permission);
-      if (hasPermission) return true; // Jika sudah diizinkan, langsung return true
+      if (hasPermission) return true;
 
-      // Jika belum, minta izin
       const granted = await PermissionsAndroid.request(permission, {
-        title: title,
-        message: message,
+        title,
+        message,
         buttonPositive: 'Izinkan',
         buttonNegative: 'Tolak',
       });
       if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        console.log('Izin diberikan');
         return true;
       } else {
-        console.log('Izin ditolak');
         Alert.alert(
           'Izin Ditolak',
           'Anda perlu memberikan izin untuk melanjutkan.',
@@ -297,12 +202,10 @@ const ProfileScreen = ({ navigation }) => {
       console.warn(err);
       return false;
     }
-  };
+  }; // Menampilkan Alert Pilihan (Kamera/Galeri)
 
-  // --- FUNGSI UPLOAD FOTO ---
   const handleEditPicture = () => {
     if (!isEditing) return;
-
     Alert.alert(
       'Ubah Foto Profil',
       'Pilih sumber foto Anda:',
@@ -313,9 +216,8 @@ const ProfileScreen = ({ navigation }) => {
       ],
       { cancelable: true },
     );
-  };
+  }; // Memilih gambar dan memanggil context
 
-  // --- FUNGSI pickImage (FIX: 'length' of undefined) ---
   const pickImage = async source => {
     const options = {
       mediaType: 'photo',
@@ -325,73 +227,23 @@ const ProfileScreen = ({ navigation }) => {
       includeBase64: true,
     };
 
-    let action = source === 'camera' ? launchCamera : launchImageLibrary;
-
-    // Panggil fungsi izin
+    const action = source === 'camera' ? launchCamera : launchImageLibrary;
     const hasPermission = await requestPermission(source);
-    if (!hasPermission) return; // Hentikan jika izin ditolak
+    if (!hasPermission) return;
 
     try {
       const response = await action(options);
 
-      if (response.didCancel) {
-        console.log('User membatalkan pilihan gambar');
-        return;
-      }
-      if (response.errorCode) {
-        throw new Error(response.errorMessage);
-      }
-      if (!response.assets || response.assets.length === 0) {
+      if (response.didCancel) return;
+      if (response.errorCode) throw new Error(response.errorMessage);
+      if (!response.assets || response.assets.length === 0)
         throw new Error('Gagal mendapatkan gambar');
-      }
 
       const asset = response.assets[0];
+      if (!asset.base64)
+        throw new Error('Gagal memproses data gambar (base64 null).');
 
-      // <<< --- INI PERBAIKAN BUG 'length' of undefined --- >>>
-      if (!asset.base64) {
-        throw new Error(
-          'Gagal memproses data gambar (base64 null). Coba gambar lain.',
-        );
-      }
-      // <<< --- BATAS PERBAIKAN --- >>>
-
-      const base64 = asset.base64;
-      const contentType = asset.type || 'image/jpeg';
-
-      setIsSaving(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('User tidak ditemukan.');
-
-      const filePath = `${user.id}/${new Date().getTime()}.png`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, decode(base64), {
-          contentType,
-          upsert: true,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      const publicUrl = urlData.publicUrl;
-
-      const { error: dbError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl, updated_at: new Date() })
-        .eq('id', user.id);
-
-      if (dbError) throw dbError;
-
-      // Panggil fetchProfile() agar data baru (termasuk avatar_url)
-      // di-fetch ulang ke state
-      await fetchProfile(true);
+      await uploadAvatar(asset); // Panggil fungsi context
 
       setModalState({
         isVisible: true,
@@ -400,27 +252,22 @@ const ProfileScreen = ({ navigation }) => {
         modalType: 'success',
       });
     } catch (error) {
-      console.error('Error ganti foto profil:', error.message);
       setModalState({
         isVisible: true,
         title: 'Upload Gagal',
         message: error.message,
         modalType: 'error',
       });
-    } finally {
-      setIsSaving(false);
     }
-  };
+  }; // --- 6. NAVIGASI ---
 
-  // --- Navigasi ---
   const handleTaskAction = () => navigation.navigate('Jelajahi');
   const handleChangePassword = () => navigation.navigate('ChangePassword');
-  const handleHelp = () => console.log('Help');
+  const handleHelp = () => navigation.navigate('SupportChat');
   const hideModal = () =>
-    setModalState(prev => ({ ...prev, isVisible: false }));
+    setModalState(prev => ({ ...prev, isVisible: false })); // --- 7. RENDER --- // Tampilan Loading Awal
 
-  // Loading Awal
-  if (loading && !refreshing) {
+  if (contextLoading && !refreshing) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
         <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
@@ -428,17 +275,14 @@ const ProfileScreen = ({ navigation }) => {
         <Text style={styles.loadingText}>Memuat Profil...</Text>
       </SafeAreaView>
     );
-  }
+  } // Kalkulasi progress bar
 
-  // Progress Bar Task
   const taskProgressPercent =
     (currentTask.progress / (currentTask.total || 1)) * 100;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
-
-      {/* --- Header (Dengan Ikon Emoji) --- */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profil Saya</Text>
         {isEditing ? (
@@ -449,6 +293,7 @@ const ProfileScreen = ({ navigation }) => {
             >
               <Text style={styles.headerButtonText}>❌</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               onPress={handleSaveProfile}
               style={[styles.headerButton, styles.headerButtonSave]}
@@ -470,7 +315,6 @@ const ProfileScreen = ({ navigation }) => {
           </TouchableOpacity>
         )}
       </View>
-
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -483,28 +327,28 @@ const ProfileScreen = ({ navigation }) => {
           />
         }
       >
-        {/* --- Area Info Profil Atas --- */}
+        {/* --- Area Info Profil --- */}
         <View style={styles.profileHeader}>
           <TouchableOpacity onPress={handleEditPicture} disabled={!isEditing}>
             <Image
               source={
                 profileData.avatar_url
                   ? { uri: profileData.avatar_url }
-                  : require('../../../assets/images/dummyImage2.png') // Fallback
+                  : require('../../../assets/images/dummyImage2.png')
               }
               style={styles.profilePic}
             />
+
             {isEditing && (
               <View style={styles.editIconSmallContainer}>
                 <Text style={styles.editIconSmallText}>✏️</Text>
               </View>
             )}
           </TouchableOpacity>
+
           <Text style={styles.profileName}>{profileData.full_name}</Text>
           <Text style={styles.profileUsername}>@{profileData.username}</Text>
         </View>
-
-        {/* --- Area Stats (Dengan Ikon Emoji) --- */}
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
             <Text style={styles.statIcon}>🏆</Text>
@@ -520,23 +364,28 @@ const ProfileScreen = ({ navigation }) => {
             <Text style={styles.statLabel}>Poin</Text>
           </View>
         </View>
-
-        {/* --- Card Task Harian (Dengan Ikon Emoji) --- */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Tugas Harian</Text>
+          <View style={styles.cardTitleContainer}>
+            <Text style={styles.cardTitle}>Tugas Harian</Text>
+            <Text style={styles.timerText}>Reset dalam: {timeLeft}</Text>
+          </View>
+
           <View style={styles.taskHeader}>
             <View style={styles.taskIcon}>
               <Text style={styles.taskIconText}>
                 {currentTask.isCompleted ? '✅' : '📢'}
               </Text>
             </View>
+
             <Text style={styles.taskInfo} numberOfLines={1}>
               {currentTask.title}
             </Text>
+
             <Text style={styles.taskProgress}>
               {currentTask.progress}/{currentTask.total}
             </Text>
           </View>
+
           <View style={styles.progressBarBackground}>
             <View
               style={[
@@ -545,6 +394,7 @@ const ProfileScreen = ({ navigation }) => {
               ]}
             />
           </View>
+
           <View style={styles.taskFooter}>
             <Text style={styles.adInfo}>
               Reward: {currentTask.pointsReward} Poin
@@ -563,8 +413,6 @@ const ProfileScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* --- Card Informasi Akun (Sesuai Skema) --- */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Informasi Akun</Text>
           <EditableInfoRow
@@ -603,8 +451,6 @@ const ProfileScreen = ({ navigation }) => {
             isLast
           />
         </View>
-
-        {/* --- Card Pengaturan Akun (Dengan Ikon Emoji) --- */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Pengaturan</Text>
           <ActionItem
@@ -619,8 +465,6 @@ const ProfileScreen = ({ navigation }) => {
             isLast
           />
         </View>
-
-        {/* --- Tombol Logout (Dengan Ikon Emoji) --- */}
         <View style={[styles.card, styles.logoutCard]}>
           <ActionItem
             icon="🔄"
@@ -630,11 +474,8 @@ const ProfileScreen = ({ navigation }) => {
             isLogout
           />
         </View>
-
         <View style={{ height: 40 }} />
       </ScrollView>
-
-      {/* --- Modal dan Overlay --- */}
       <InfoModal
         isVisible={modalState.isVisible}
         title={modalState.title}
@@ -651,7 +492,7 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-// --- STYLES (Versi Emoji) ---
+// --- STYLES (Dengan Penambahan untuk Timer) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F4F4' },
   scrollView: { flex: 1 },
@@ -795,13 +636,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
+  }, // --- STYLE BARU ---
+  cardTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  timerText: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-  },
+    color: '#333', // marginBottom dihapus dari sini
+  }, // --- STYLE BARU ---
+
   taskHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -809,7 +661,7 @@ const styles = StyleSheet.create({
   },
   taskIcon: {
     marginRight: 10,
-    width: 20, // Samakan dengan emoji
+    width: 20,
     alignItems: 'center',
   },
   taskIconText: {
@@ -858,9 +710,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  actionListCard: {
-    paddingVertical: 5,
   },
   actionItem: {
     flexDirection: 'row',

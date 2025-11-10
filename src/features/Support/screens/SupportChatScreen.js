@@ -1,5 +1,4 @@
-// src/features/Discussion/screens/ChatScreen.js
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,209 +10,137 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Image,
   ActivityIndicator,
 } from 'react-native';
 
 import { supabase } from '../../../services/supabaseClient';
 import InfoModal from '../../../components/common/InfoModal';
 
-const placeholderAvatar =
-  'https://via.placeholder.com/40/A77C55/FFFFFF?text=AH';
+// Ganti nama layar dan tujuannya
+const SCREEN_NAME = 'Pusat Bantuan';
+const TABLE_NAME = 'support_messages'; // Tabel baru yang kita buat
 
-const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
-
-const ChatScreen = ({ route, navigation }) => {
-  // --- 1. Ambil 'isGroupChat' dari params ---
-  const { chatId, chatName, chatAvatarUrl, isGroupChat } = route.params || {
-    chatId: 'unknown',
-    chatName: 'Error',
-    chatAvatarUrl: null,
-    isGroupChat: false, // Default ke false
-  };
-
+const SupportChatScreen = ({ navigation }) => {
+  // State dan Ref
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [currentUserID, setCurrentUserID] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
+  const [isSending, setIsSending] = useState(false); // Modal State
 
-  // Modal State
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
   const flatListRef = useRef(null);
-  const headerAvatarSource = chatAvatarUrl
-    ? { uri: chatAvatarUrl }
-    : { uri: placeholderAvatar };
 
   const showError = (title, message) => {
     setModalTitle(title);
     setModalMessage(message);
     setModalVisible(true);
-  };
+  }; // --- FUNGSI UTAMA: FETCH DATA ---
 
-  // --- 2. Modifikasi useEffect (fetchData) ---
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-        if (authError) throw authError;
-        if (!user) throw new Error('User not found');
-        setCurrentUserID(user.id);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error('User not found');
+      setCurrentUserID(user.id); // Query: Ambil pesan berdasarkan user_id (yang bertindak sebagai room_id) // NOTE: Kita tidak perlu JOIN profile di sini karena nama pengirim // pasti "Admin" atau "Anda" (User)
 
-        // --- 3. UBAH QUERY: Sertakan data 'profiles' ---
-        // Ambil data pesan DAN 'username' dari tabel 'profiles'
-        const { data: messageData, error: messageError } = await supabase
-          .from('messages')
-          .select(
-            `
-            *,
-            profiles (
-              username
-            )
-          `,
-          )
-          .eq('room_id', chatId)
-          .order('created_at', { ascending: true });
+      const { data: messageData, error: messageError } = await supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .eq('user_id', user.id) // Filter berdasarkan user_id saat ini
+        .order('created_at', { ascending: true });
 
-        if (messageError) {
-          throw messageError;
-        }
+      if (messageError) throw messageError;
 
-        setMessages(messageData || []);
-      } catch (error) {
-        showError('Gagal Memuat Chat', error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (chatId !== 'unknown') {
-      fetchData();
-    } else {
-      showError('Error', 'ID Chat tidak valid.');
+      setMessages(messageData || []);
+    } catch (error) {
+      showError('Gagal Memuat Chat Bantuan', error.message);
+    } finally {
       setLoading(false);
     }
-  }, [chatId]);
+  }, []); // --- REALTIME LISTENER ---
 
-  // --- 4. Modifikasi useEffect (Realtime) ---
   useEffect(() => {
-    if (!currentUserID || chatId === 'unknown') return;
-
-    // --- 5. BUAT FUNGSI UNTUK MENGAMBIL PESAN DENGAN PROFIL ---
-    // (Realtime 'payload.new' tidak bisa di-join, jadi kita fetch manual)
-    const getMessageWithProfile = async messageId => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*, profiles(username)')
-        .eq('id', messageId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching new message:', error);
-        return null;
-      }
-      return data;
-    };
+    if (!currentUserID) return; // 1. Subscribe ke tabel support_messages dengan filter user_id
 
     const channel = supabase
-      .channel(`public:messages:room_id=eq.${chatId}`)
+      .channel(`support:messages:user_id=eq.${currentUserID}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages',
-          filter: `room_id=eq.${chatId}`,
+          table: TABLE_NAME,
+          filter: `user_id=eq.${currentUserID}`,
         },
-        async payload => {
-          // Ambil pesan lengkap DENGAN profil
-          const newMessage = await getMessageWithProfile(payload.new.id);
-          if (newMessage) {
-            setMessages(prevMessages => {
-              if (!prevMessages.find(msg => msg.id === newMessage.id)) {
-                return [...prevMessages, newMessage];
-              }
-              return prevMessages;
-            });
-          }
+        payload => {
+          // Karena payload Realtime sudah lengkap (tidak perlu JOIN), kita langsung pakai
+          const newMessage = payload.new;
+          setMessages(prevMessages => {
+            if (!prevMessages.find(msg => msg.id === newMessage.id)) {
+              return [...prevMessages, newMessage];
+            }
+            return prevMessages;
+          });
         },
       )
-      .subscribe(status => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Realtime channel connected!');
-        }
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          showError('Koneksi Realtime Gagal', 'Koneksi chat terputus.');
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chatId, currentUserID]);
+  }, [currentUserID]); // --- LIFE CYCLE ---
 
-  // --- 6. Fungsi handleSend (Tidak perlu diubah) ---
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]); // --- FUNGSI KIRIM PESAN ---
+
   const handleSend = async () => {
-    if (inputText.trim().length === 0 || !currentUserID || isSending) {
-      return;
-    }
+    if (inputText.trim().length === 0 || !currentUserID || isSending) return;
+
     setIsSending(true);
     const content = inputText.trim();
     setInputText('');
+
     const newMessage = {
-      room_id: chatId,
       user_id: currentUserID,
       content: content,
+      is_from_admin: false, // Penting: Pesan dari user
     };
+
     try {
-      const { error } = await supabase.from('messages').insert(newMessage);
-      if (error) throw error;
-      // Pesan akan muncul via Realtime
+      // Insert ke tabel support_messages
+      const { error } = await supabase.from(TABLE_NAME).insert(newMessage);
+      if (error) throw error; // Pesan akan muncul via Realtime
     } catch (error) {
       showError('Gagal Mengirim Pesan', error.message);
       setInputText(content);
     } finally {
       setIsSending(false);
     }
-  };
+  }; // Scroll ke bawah saat pesan bertambah
 
-  // Scroll ke bawah (logika tetap sama)
   useEffect(() => {
-    // Hanya scroll jika ada pesan
     if (messages.length > 0) {
       setTimeout(() => {
-        // Cek SEKALI LAGI di dalam timeout
         if (flatListRef.current) {
           flatListRef.current.scrollToEnd({ animated: true });
         }
-      }, 100); // Beri 100ms agar UI selesai render
+      }, 100);
     }
-  }, [messages]);
+  }, [messages]); // --- RENDER ITEM PESAN ---
 
-  // --- 7. Perbarui renderMessageItem (LOGIKA KUNCI) ---
   const renderMessageItem = ({ item }) => {
-    // 1. Cek apakah ini pesan sistem
-    if (item.user_id === SYSTEM_USER_ID) {
-      return (
-        <View style={styles.systemMessageContainer}>
-          <Text style={styles.systemMessageText}>{item.content}</Text>
-        </View>
-      );
-    }
-
-    // 2. Jika bukan pesan sistem, lanjutkan logika lama
-    const isUserSender = item.user_id === currentUserID;
-
-    const username = item.profiles?.username;
-    const senderName =
-      username && username.trim().length > 0 ? username.trim() : 'Anonymous';
+    // is_from_admin: false -> pesan user (kanan)
+    // is_from_admin: true -> pesan admin (kiri)
+    const isUserSender = item.is_from_admin === false;
 
     return (
       <View
@@ -221,76 +148,58 @@ const ChatScreen = ({ route, navigation }) => {
           styles.messageBubbleContainer,
           isUserSender
             ? styles.userMessageContainer
-            : styles.expertMessageContainer,
+            : styles.adminMessageContainer,
         ]}
       >
-        {isGroupChat && !isUserSender && (
-          <Text style={styles.senderName}>{senderName}</Text>
-        )}
-
+               {' '}
         <View
           style={[
             styles.messageBubble,
-            isUserSender
-              ? styles.userMessageBubble
-              : styles.expertMessageBubble,
+            isUserSender ? styles.userMessageBubble : styles.adminMessageBubble,
           ]}
         >
-          <Text style={styles.messageText}>{item.content}</Text>
+                   {' '}
+          {!isUserSender && <Text style={styles.senderName}>Admin</Text>}       
+            <Text style={styles.messageText}>{item.content}</Text>         {' '}
           <Text style={styles.messageTime}>
+                       {' '}
             {new Date(item.created_at).toLocaleTimeString('id-ID', {
               hour: '2-digit',
               minute: '2-digit',
             })}
+                     {' '}
           </Text>
+                 {' '}
         </View>
+             {' '}
       </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-
-      {/* Header Chat */}
+            <StatusBar barStyle="light-content" backgroundColor="#6A453C" />   
+        {/* Header Chat */}     {' '}
       <View style={styles.header}>
+               {' '}
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.headerButton}
         >
-          <Text style={styles.headerBackText}>{'<'}</Text>
+                    <Text style={styles.headerBackText}>{'<'}</Text>       {' '}
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerContent}
-          onPress={() => {
-            if (isGroupChat) {
-              navigation.navigate('GroupInfo', {
-                chatId: chatId,
-                chatName: chatName,
-                chatAvatarUrl: chatAvatarUrl,
-              });
-            }
-          }}
-          disabled={!isGroupChat}
-        >
-          <Image source={headerAvatarSource} style={styles.headerAvatar} />
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {chatName}
-          </Text>
-        </TouchableOpacity>
-        <View style={{ width: 40 }} />
+                <Text style={styles.headerTitle}>{SCREEN_NAME}</Text>
+                <View style={{ width: 40 }} />     {' '}
       </View>
-
-      {/* Keyboard Avoiding View */}
+            {/* Keyboard Avoiding View */}     {' '}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingContainer}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
       >
-        {/* Tampilkan Loading atau Daftar Pesan */}
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#6A453C" />
+            <ActivityIndicator size="large" color="#6A453C" />     
           </View>
         ) : (
           <FlatList
@@ -302,7 +211,9 @@ const ChatScreen = ({ route, navigation }) => {
             contentContainerStyle={styles.messageListContent}
             ListEmptyComponent={
               <View style={styles.emptyChatContainer}>
-                <Text style={styles.emptyChatText}>Mulai percakapan...</Text>
+                <Text style={styles.emptyChatText}>
+                  Kami siap membantu Anda. Tanyakan kendala Anda di sini.
+                </Text>
               </View>
             }
             onContentSizeChange={() =>
@@ -313,9 +224,9 @@ const ChatScreen = ({ route, navigation }) => {
             }
           />
         )}
-
-        {/* Input Area */}
+                {/* Input Area */}       {' '}
         <View style={styles.inputContainer}>
+                   {' '}
           <TextInput
             style={styles.textInput}
             placeholder="Ketik pesan..."
@@ -324,6 +235,7 @@ const ChatScreen = ({ route, navigation }) => {
             multiline
             editable={!isSending}
           />
+                   {' '}
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -333,27 +245,30 @@ const ChatScreen = ({ route, navigation }) => {
             onPress={handleSend}
             disabled={isSending || inputText.trim().length === 0}
           >
+                       {' '}
             {isSending ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
               <Text style={styles.sendButtonText}>➔</Text>
             )}
+                     {' '}
           </TouchableOpacity>
+                 {' '}
         </View>
+             {' '}
       </KeyboardAvoidingView>
-
-      {/* Modal Error */}
+            {/* Modal Error */}     {' '}
       <InfoModal
         isVisible={modalVisible}
         onClose={() => setModalVisible(false)}
         title={modalTitle}
         message={modalMessage}
       />
+         {' '}
     </SafeAreaView>
   );
 };
 
-// --- 9. Tambahkan style baru untuk 'senderName' ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -366,27 +281,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#6A453C',
   },
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 10,
-  },
   headerButton: { padding: 8 },
   headerBackText: { fontSize: 28, color: '#FFFFFF', fontWeight: 'bold' },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginLeft: 10,
-    marginRight: 10,
-    backgroundColor: '#FFF',
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
     flex: 1,
+    marginLeft: 10,
   },
   keyboardAvoidingContainer: {
     flex: 1,
@@ -405,19 +307,6 @@ const styles = StyleSheet.create({
     color: '#999',
   },
 
-  systemMessageContainer: {
-    alignSelf: 'center',
-    backgroundColor: '#E0E0E0',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginVertical: 8,
-  },
-  systemMessageText: {
-    fontSize: 12,
-    color: '#555',
-    fontStyle: 'italic',
-  },
   messageList: {
     flex: 1,
   },
@@ -432,14 +321,13 @@ const styles = StyleSheet.create({
   userMessageContainer: {
     alignSelf: 'flex-end',
   },
-  expertMessageContainer: {
+  adminMessageContainer: {
     alignSelf: 'flex-start',
   },
   senderName: {
-    // <<< STYLE BARU
     fontSize: 13,
     fontWeight: 'bold',
-    color: '#6A453C', // Sesuaikan warnanya
+    color: '#4A2F2F', // Warna untuk Admin
     marginBottom: 4,
     marginLeft: 10,
   },
@@ -452,9 +340,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCF8C6',
     borderTopRightRadius: 5,
   },
-  expertMessageBubble: {
+  adminMessageBubble: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 5,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   messageText: {
     fontSize: 15,
@@ -508,4 +398,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ChatScreen;
+export default SupportChatScreen;

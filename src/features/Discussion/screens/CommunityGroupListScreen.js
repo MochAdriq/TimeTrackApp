@@ -160,6 +160,14 @@ const CommunityGroupListScreen = ({ navigation }) => {
         />
       )}
 
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('CreateGroup')}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+      {/* --- BATAS KODE TAMBAHAN --- */}
+
       <Modal isVisible={joiningRoom} style={styles.joiningModal}>
         <View style={styles.joiningContainer}>
           <ActivityIndicator size="large" color="#6A453C" />
@@ -223,6 +231,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#AAA',
     textAlign: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 25,
+    right: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#6A453C',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  fabText: {
+    fontSize: 30,
+    color: '#FFFFFF',
+    lineHeight: 32,
   },
   // --- Style untuk Modal "Joining" ---
   joiningModal: {

@@ -6,33 +6,28 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Image, // <<< 1. IMPORT Image
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-
-// <<< 2. HAPUS IMPORT ProfilePict (SVG) >>>
-// import ProfilePict from '../../../assets/images/ProfilePict.svg';
 import BellIcon from '../../../assets/icon/BellIcon.svg';
+
+// --- (Import Context) ---
 import { useNotification } from '../../../context/NotificationContext';
-// (Kita akan ambil avatar_url dari props, yang di-supply oleh HomeScreen)
+// <<< 1. IMPORT useProfile >>>
+import { useProfile } from '../../../context/ProfileContext';
 
-// <<< 3. TAMBAHKAN 'avatarUrl' KE PROPS >>>
-const Header = ({
-  userName,
-  level,
-  points,
-  onNotificationPress,
-  onLayout,
-  avatarUrl,
-}) => {
+// Gambar fallback (pastikan path ini benar)
+const fallbackImage = require('../../../assets/images/dummyImage2.png');
+
+// <<< 2. HAPUS PROPS PROFIL (userName, level, points, avatarUrl) >>>
+const Header = ({ onNotificationPress, onLayout }) => {
   const navigation = useNavigation();
-  const { unreadCount } = useNotification();
+  const { unreadCount } = useNotification(); // <<< 3. AMBIL DATA PROFIL DARI CONTEXT >>>
+  const { profile } = useProfile(); // <<< 4. TENTUKAN SUMBER GAMBAR (menggunakan 'profile' dari context) >>>
 
-  // <<< 4. TENTUKAN SUMBER GAMBAR >>>
-  // Pastikan Boss punya gambar fallback di path ini
-  const profileImageSource = avatarUrl
-    ? { uri: avatarUrl }
-    : require('../../../assets/images/dummyImage2.png');
+  const profileImageSource = profile.avatar_url
+    ? { uri: profile.avatar_url }
+    : fallbackImage;
 
   return (
     <View style={styles.outerContainer} onLayout={onLayout}>
@@ -44,33 +39,30 @@ const Header = ({
             activeOpacity={0.7}
           >
             <View style={styles.profileContainer}>
-              {/* <<< 5. GANTI ProfilePict DENGAN Image >>> */}
               <Image source={profileImageSource} style={styles.profilePict} />
               <View style={styles.userInfo}>
-                <Text style={styles.greeting}>Hi, {userName}</Text>
+                <Text style={styles.greeting}>Hi, {profile.username}</Text>
                 <Text style={styles.subGreeting}>Good Morning</Text>
                 <View style={styles.levelContainer}>
-                  <Text style={styles.levelText}>Level {level}</Text>
+                  <Text style={styles.levelText}>Level {profile.level}</Text>
                   <View style={styles.pointsContainer}>
                     <Text style={styles.pointsText}>
-                      {points.toLocaleString('id-ID')}
+                      {profile.points.toLocaleString('id-ID')}
                     </Text>
-                    <View style={styles.coinIconPlaceholder} />
+                    <View style={styles.coinIconPlaceholder} />{' '}
                   </View>
                 </View>
               </View>
             </View>
           </TouchableOpacity>
-
-          {/* --- Tombol Notifikasi (Tidak Berubah) --- */}
           <TouchableOpacity
             style={styles.notificationButton}
             onPress={onNotificationPress}
           >
             <BellIcon width={40} height={40} />
-            {unreadCount > 0 && <View style={styles.badgeContainer} />}
+            {unreadCount > 0 && <View style={styles.badgeContainer} />}{' '}
           </TouchableOpacity>
-        </View>
+        </View>{' '}
       </View>
     </View>
   );
@@ -97,13 +89,13 @@ const styles = StyleSheet.create({
     marginLeft: 1,
   },
   profilePict: {
-    // <<< 6. PERBAIKI STYLE UNTUK <Image> >>>
+    // <<< 7. STYLE UNTUK <Image> (Sudah benar) >>>
     width: 80,
     height: 80,
-    borderRadius: 40, // Setengah dari width/height agar bulat
+    borderRadius: 40,
     backgroundColor: '#FFF',
     marginRight: 15,
-    borderWidth: 2, // Opsional: border putih
+    borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   userInfo: {
@@ -160,9 +152,6 @@ const styles = StyleSheet.create({
     borderRadius: 16.25,
     right: 10,
     position: 'relative',
-  },
-  notificationIconPlaceholder: {
-    // Tidak terpakai lagi
   },
   badgeContainer: {
     position: 'absolute',

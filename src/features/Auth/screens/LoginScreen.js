@@ -11,7 +11,7 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
-  Alert, // <<< 1. PASTIKAN 'Alert' DI-IMPORT (walau kita pakai modal)
+  Alert,
 } from 'react-native';
 
 import TimeTrackNameWhite from '../../../assets/images/TimeTrackNameWhite.svg';
@@ -107,7 +107,7 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
-  // --- 2. FUNGSI BARU UNTUK LUPA PASSWORD ---
+  // --- 2. FUNGSI LUPA PASSWORD (DIMODIFIKASI) ---
   const handleForgotPassword = async () => {
     if (loading) return; // Mencegah klik ganda saat loading
     const trimmedEmail = email.trim();
@@ -125,8 +125,15 @@ const LoginScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      // Ini adalah fungsi Supabase untuk mengirim Magic Link
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail);
+      // --- PERUBAHAN DI SINI ---
+      // Tambahkan 'redirectTo' agar Supabase mengirim deep link
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        trimmedEmail,
+        {
+          redirectTo: 'com.timetrackerapp://callback',
+        },
+      );
+      // --- BATAS PERUBAHAN ---
 
       if (error) {
         throw error; // Lempar ke catch block

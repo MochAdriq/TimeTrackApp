@@ -12,8 +12,9 @@ import CustomDrawerContent from './CustomDrawerContent';
 import WelcomeScreen from '../features/Auth/screens/WelcomeScreen';
 import LoginScreen from '../features/Auth/screens/LoginScreen';
 import RegisterScreen from '../features/Auth/screens/RegisterScreen';
+import NewPasswordScreen from '../features/Auth/screens/NewPasswordScreen';
 
-// Layar Lain
+// ... (Semua import layar lain tetap sama) ...
 import MateriScreen from '../features/Materi/screens/MateriScreen';
 import RedeemPoinScreen from '../features/Profiles/screens/RedeemPoinScreen';
 import EditProfileScreen from '../features/Profiles/screens/EditProfileScreen';
@@ -33,6 +34,13 @@ import NotificationScreen from '../features/Notification/screens/NotificationScr
 import FavoriteScreen from '../features/Favorites/screens/FavoriteScreen';
 import ChangePasswordScreen from '../features/Profiles/screens/ChangePasswordScreen';
 import DeveloperScreen from '../screens/DeveloperScreen';
+import MyChatListScreen from '../features/Discussion/screens/MyChatListScreen';
+import CreateGroupScreen from '../features/Discussion/screens/CreateGroupScreen';
+import GroupInfoScreen from '../features/Discussion/screens/GroupInfoScreen';
+import SupportChatScreen from '../features/Support/screens/SupportChatScreen';
+
+// --- KEMBALIKAN IMPORT INI ---
+import { navigationRef } from './navigationRef';
 
 const RootStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
@@ -47,11 +55,12 @@ const AuthNavigator = () => (
     <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
     <AuthStack.Screen name="Login" component={LoginScreen} />
     <AuthStack.Screen name="Register" component={RegisterScreen} />
+    {/* Pastikan NewPasswordScreen TIDAK ADA di sini */}
   </AuthStack.Navigator>
 );
 
 // --- Ini Drawer untuk SESUDAH LOGIN ---
-// (Kita pakai file AppDrawer yang Anda kirim)
+// (Tidak ada perubahan di sini)
 function AppDrawer() {
   return (
     <Drawer.Navigator
@@ -74,17 +83,26 @@ function AppDrawer() {
   );
 }
 
+// --- HAPUS KONFIGURASI LINKING ---
+/*
+const linking = {
+  ...
+};
+*/
+// --- BATAS PENGHAPUSAN ---
+
 // --- INI BAGIAN PENTING ---
 // Navigator Utama sekarang menerima 'session' sebagai prop
 const AppNavigator = ({ session }) => {
   return (
-    <NavigationContainer>
+    // --- HAPUS 'linking' DAN TAMBAHKAN 'ref' ---
+    <NavigationContainer ref={navigationRef}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           // --- GRUP LAYAR JIKA SUDAH LOGIN ---
           <RootStack.Group>
             <RootStack.Screen name="MainApp" component={AppDrawer} />
-            {/* Taruh semua layar lain yang bisa diakses setelah login di sini */}
+            {/* ... (Semua layar Boss yang lain tetap di sini) ... */}
             <RootStack.Screen name="MateriDetail" component={MateriScreen} />
             <RootStack.Screen name="RedeemPoin" component={RedeemPoinScreen} />
             <RootStack.Screen
@@ -128,16 +146,30 @@ const AppNavigator = ({ session }) => {
               component={CommunityGroupListScreen}
             />
             <RootStack.Screen name="ChatScreen" component={ChatScreen} />
+            <RootStack.Screen name="MyChatList" component={MyChatListScreen} />
+            <RootStack.Screen
+              name="CreateGroup"
+              component={CreateGroupScreen}
+            />
+            <RootStack.Screen name="GroupInfo" component={GroupInfoScreen} />
+            <RootStack.Screen
+              name="SupportChat"
+              component={SupportChatScreen}
+            />
             <RootStack.Screen
               name="DeveloperScreen"
               component={DeveloperScreen}
             />
           </RootStack.Group>
         ) : (
+          // --- GRUP LAYAR JIKA BELUM LOGIN ---
           <RootStack.Group>
             <RootStack.Screen name="Auth" component={AuthNavigator} />
           </RootStack.Group>
         )}
+
+        {/* Layar ini harus bisa diakses kapanpun oleh deep link */}
+        <RootStack.Screen name="NewPassword" component={NewPasswordScreen} />
       </RootStack.Navigator>
     </NavigationContainer>
   );

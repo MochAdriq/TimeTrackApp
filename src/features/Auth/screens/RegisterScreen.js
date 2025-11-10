@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 // src/features/Auth/screens/RegisterScreen.js
 
 import React, { useState } from 'react';
@@ -84,6 +85,7 @@ const RegisterScreen = ({ navigation }) => {
     });
   };
 
+  // --- MODIFIKASI handleRegister ---
   const handleRegister = async () => {
     const trimmedEmail = email.trim();
     const trimmedUsername = username.trim().toLowerCase();
@@ -125,6 +127,11 @@ const RegisterScreen = ({ navigation }) => {
         password: trimmedPassword,
         phone: trimmedPhoneNumber, // <<< Simpan ke auth.users
         options: {
+          // --- TAMBAHKAN INI ---
+          // Arahkan user ke link ini setelah klik email konfirmasi
+          // Ini akan memicu Deep Link yang kita atur
+          emailRedirectTo: 'com.timetrackerapp://callback',
+          // --- BATAS TAMBAHAN ---
           data: {
             full_name: trimmedFullName,
             username: trimmedUsername,
@@ -147,7 +154,7 @@ const RegisterScreen = ({ navigation }) => {
         isVisible: true,
         title: 'Pendaftaran Berhasil!',
         message:
-          'Akun Anda telah dibuat. Silakan cek email Anda untuk link konfirmasi sebelum login.',
+          'Akun Anda telah dibuat. Silakan cek email Anda untuk link konfirmasi.\nSetelah menekan link silahkan lakukan login kembali dengan akun yang di daftarkan',
         modalType: 'success',
         onClose: () => navigation.navigate('Login'),
       });
@@ -163,6 +170,7 @@ const RegisterScreen = ({ navigation }) => {
       });
     }
   };
+  // --- BATAS MODIFIKASI ---
 
   const handlePrivacyPolicy = () => {
     console.log('Open Privacy Policy');

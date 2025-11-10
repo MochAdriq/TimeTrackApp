@@ -185,7 +185,7 @@ const CustomDrawerContent = props => {
           <DrawerItem
             icon={<InfoIcon width={24} height={24} fill="#fff" />}
             label="Bantuan"
-            // onPress={() => handleNavigation('PlaceholderScreen')}
+            onPress={() => handleNavigation('SupportChat')}
           />
         </View>
       </DrawerContentScrollView>

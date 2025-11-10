@@ -28,7 +28,7 @@ const DiscussionChoiceScreen = ({ navigation }) => {
   };
 
   const handleOpenChatList = () => {
-    setModalVisible(true); // Buka modal
+    navigation.navigate('MyChatList');
   };
 
   return (

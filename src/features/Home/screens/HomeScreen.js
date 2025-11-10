@@ -20,7 +20,7 @@ import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentMo
 
 import { supabase } from '../../../services/supabaseClient';
 import { useNotification } from '../../../context/NotificationContext';
-// <<< 1. IMPORT useProfile >>>
+// <<< 1. IMPORT HANYA 'fetchProfile' DARI useProfile >>>
 import { useProfile } from '../../../context/ProfileContext';
 
 // --- (Fungsi formatMateriData dan filterMateri tetap sama) ---
@@ -36,18 +36,14 @@ const filterMateri = (data, query) => {
   const lowerCaseQuery = query.toLowerCase();
   return data.filter(item => item.title.toLowerCase().includes(lowerCaseQuery));
 };
+// --- (Batas Fungsi) ---
 
 const HomeScreen = ({ navigation }) => {
-  // <<< 2. AMBIL DATA PROFIL DARI CONTEXT >>>
-  const { profile, fetchProfile } = useProfile();
+  // <<< 2. AMBIL HANYA FUNGSI 'fetchProfile' DARI CONTEXT >>>
+  const { fetchProfile } = useProfile(); // <<< 3. HAPUS SEMUA STATE LOKAL PROFIL >>>
 
-  // <<< 3. HAPUS state lama untuk profil >>>
-  // const [userName, setUserName] = useState('Memuat...');
-  // const [userLevel, setUserLevel] = useState(0);
-  // const [userPoints, setUserPoints] = useState(0);
-  const [userId, setUserId] = useState(null); // <<< Biarkan ini untuk fetch favorites
+  const [userId, setUserId] = useState(null); // (Biarkan ini untuk fetch favorites) // --- (State lain tetap sama) ---
 
-  // --- (State lain tetap sama) ---
   const [headerHeight, setHeaderHeight] = useState(0);
   const [isModalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true); // Ini untuk loading materi
@@ -59,9 +55,8 @@ const HomeScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const { fetchUnreadCount } = useNotification();
+  const { fetchUnreadCount } = useNotification(); // <<< 4. fetchData (TETAP SAMA, SUDAH BERSIH DARI PROFIL) >>>
 
-  // <<< 4. MODIFIKASI fetchData (HAPUS bagian fetch 'profiles') >>>
   const fetchData = useCallback(
     async (isRefresh = false) => {
       if (!isRefresh) {
@@ -75,12 +70,10 @@ const HomeScreen = ({ navigation }) => {
         if (userError) throw new Error(`User Error: ${userError.message}`);
         if (!user) throw new Error('User tidak ditemukan (session null)');
 
-        // Set userId (masih dibutuhkan untuk 'user_favorites')
         if (!userId) {
           setUserId(user.id);
         }
 
-        // <<< HAPUS 'profileResult' DARI Promise.all >>>
         const [
           populerResult,
           budayaResult,
@@ -88,7 +81,6 @@ const HomeScreen = ({ navigation }) => {
           sejarahLainResult,
           favoritesResult,
         ] = await Promise.all([
-          // supabase.from('profiles')... <<< INI DIHAPUS
           supabase
             .from('materi')
             .select('*')
@@ -100,7 +92,7 @@ const HomeScreen = ({ navigation }) => {
           supabase
             .from('user_favorites')
             .select('materi_id')
-            .eq('user_id', user.id), // 'user.id' lebih instan daripada state 'userId'
+            .eq('user_id', user.id),
         ]);
 
         const validateQueryResult = (result, name) => {
@@ -110,7 +102,6 @@ const HomeScreen = ({ navigation }) => {
           return result.data;
         };
 
-        // <<< HAPUS 'profileData' DARI SINI >>>
         const populerData = validateQueryResult(
           populerResult,
           'Materi Populer',
@@ -125,8 +116,6 @@ const HomeScreen = ({ navigation }) => {
           favoritesResult,
           'User Favorites',
         );
-
-        // <<< HAPUS BLOK 'if (profileData)' >>>
 
         if (populerData) setMateriPopuler(populerData.map(formatMateriData));
         if (budayaData) setMateriBudaya(budayaData.map(formatMateriData));
@@ -147,26 +136,24 @@ const HomeScreen = ({ navigation }) => {
         setRefreshing(false);
       }
     },
-    [userId], // <<< Biarkan userId di sini untuk favorites
+    [userId], // Dependensi tetap, untuk favorites
   );
 
   useEffect(() => {
     fetchData(false);
-  }, [fetchData]);
+  }, [fetchData]); // <<< 5. onRefresh (TETAP SAMA, SUDAH BENAR) >>>
 
-  // <<< 5. MODIFIKASI onRefresh (tambahkan fetchProfile) >>>
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchData(true); // Panggil fetchData materi
-    fetchUnreadCount(); // Panggil fetch notifikasi
-    fetchProfile(); // <<< PANGGIL FUNGSI REFRESH PROFIL DARI CONTEXT
-  }, [fetchData, fetchUnreadCount, fetchProfile]); // <<< Tambahkan dependensi
+    fetchData(true);
+    fetchUnreadCount();
+    fetchProfile(true); // Panggil refresh profil dari context
+  }, [fetchData, fetchUnreadCount, fetchProfile]); // --- (Logika handleToggleFavorite) ---
 
-  // --- (Logika handleToggleFavorite) ---
   const handleToggleFavorite = useCallback(
     async (materiId, isCurrentlyFavorite) => {
-      // (Logika favorit tidak diubah, tapi pastikan 'userId' sudah di-set)
-      if (!userId) {
+      let currentUserId = userId;
+      if (!currentUserId) {
         const {
           data: { user },
         } = await supabase.auth.getUser();
@@ -174,14 +161,42 @@ const HomeScreen = ({ navigation }) => {
           Alert.alert('Error', 'Anda harus login untuk menyukai materi.');
           return;
         }
-        setUserId(user.id); // Set userId jika belum ada
+        currentUserId = user.id;
+        setUserId(currentUserId);
+      } // Optimistic update
+
+      const newFavoriteIds = new Set(favoriteIds);
+      if (isCurrentlyFavorite) {
+        newFavoriteIds.delete(materiId);
+      } else {
+        newFavoriteIds.add(materiId);
       }
-      // ... (sisa logika favorit Anda)
+      setFavoriteIds(newFavoriteIds); // Supabase update
+
+      if (isCurrentlyFavorite) {
+        const { error } = await supabase
+          .from('user_favorites')
+          .delete()
+          .match({ user_id: currentUserId, materi_id: materiId });
+        if (error) {
+          Alert.alert('Error', error.message);
+          newFavoriteIds.add(materiId); // Rollback optimistic update
+          setFavoriteIds(newFavoriteIds);
+        }
+      } else {
+        const { error } = await supabase
+          .from('user_favorites')
+          .insert({ user_id: currentUserId, materi_id: materiId });
+        if (error) {
+          Alert.alert('Error', error.message);
+          newFavoriteIds.delete(materiId); // Rollback optimistic update
+          setFavoriteIds(newFavoriteIds);
+        }
+      }
     },
     [userId, favoriteIds],
-  );
+  ); // --- (useMemo dan Handlers lain tetap sama) ---
 
-  // --- (useMemo dan Handlers lain tetap sama) ---
   const filteredMateriPopuler = useMemo(
     () => filterMateri(materiPopuler, searchQuery),
     [searchQuery, materiPopuler],
@@ -217,37 +232,35 @@ const HomeScreen = ({ navigation }) => {
     else if (actionId === 'quiz') navigation.navigate('QuizList');
     else if (actionId === 'market') navigation.navigate('MarketPlace');
     else if (actionId === 'diskusi') navigation.navigate('DiscussionChoice');
-  };
-
+  }; // --- (Batas Handlers) ---
   return (
     <SafeAreaView style={styles.safeArea}>
+           {' '}
       <StatusBar
         barStyle="light-content"
         backgroundColor="#4A2F2F"
         translucent={false}
       />
-      {/* <<< 6. KIRIM DATA PROFIL DARI CONTEXT KE HEADER >>> */}
-      <Header
-        userName={profile.username}
-        level={profile.level}
-        points={profile.points}
-        avatarUrl={profile.avatar_url} // <<< KIRIM PROP BARU (avatar_url)
+            {/* <<< 6. HAPUS PROPS PROFIL DARI HEADER >>> */}
+           {' '}
+      <Header // HAPUS: userName, level, points, avatarUrl
         onNotificationPress={() => navigation.navigate('Notifications')}
-        onLayout={onHeaderLayout}
-        navigation={navigation}
+        onLayout={onHeaderLayout} // HAPUS: navigation (karena Header.js sudah pakai useNavigation)
       />
-
-      {/* --- (Sisa JSX tetap sama) --- */}
+            {/* --- (Sisa JSX tetap sama) --- */}     {' '}
       {headerHeight > 0 && (
         <View
           style={[styles.searchBarContainer, { top: searchBarTopPosition }]}
         >
+                   {' '}
           <SearchBar
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
           />
+                 {' '}
         </View>
       )}
+           {' '}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
@@ -262,14 +275,17 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
-        <QuickActions onActionPress={handleQuickAction} />
+                <QuickActions onActionPress={handleQuickAction} />
+               {' '}
         <SectionHeader
           title="Materi Populer"
           onSeeAllPress={handleSeeAllPopuler}
         />
+               {' '}
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Memuat...</Text>
+                        <Text style={styles.loadingText}>Memuat...</Text>       
+             {' '}
           </View>
         ) : (
           <HorizontalCardList
@@ -281,10 +297,12 @@ const HomeScreen = ({ navigation }) => {
             onToggleFavorite={handleToggleFavorite}
           />
         )}
+               {' '}
         <SectionHeader
           title="Kebudayaan Daerah"
           onSeeAllPress={handleSeeAllBudaya}
         />
+               {' '}
         <HorizontalCardList
           data={filteredMateriBudaya}
           onCardPress={item =>
@@ -293,10 +311,12 @@ const HomeScreen = ({ navigation }) => {
           favoriteMateriIds={favoriteIds}
           onToggleFavorite={handleToggleFavorite}
         />
+               {' '}
         <SectionHeader
           title="Tokoh Nasional"
           onSeeAllPress={handleSeeAllTokoh}
         />
+               {' '}
         <HorizontalCardList
           data={filteredMateriTokoh}
           onCardPress={item =>
@@ -305,10 +325,12 @@ const HomeScreen = ({ navigation }) => {
           favoriteMateriIds={favoriteIds}
           onToggleFavorite={handleToggleFavorite}
         />
+               {' '}
         <SectionHeader
           title="Sejarah yang Tidak Diketahui"
           onSeeAllPress={handleSeeAllSejarahLain}
         />
+               {' '}
         <HorizontalCardList
           data={filteredMateriSejarahLain}
           onCardPress={item =>
@@ -317,13 +339,17 @@ const HomeScreen = ({ navigation }) => {
           favoriteMateriIds={favoriteIds}
           onToggleFavorite={handleToggleFavorite}
         />
+             {' '}
       </ScrollView>
-      <UnderDevelopmentModal isVisible={isModalVisible} onClose={closeModal} />
+           {' '}
+      <UnderDevelopmentModal isVisible={isModalVisible} onClose={closeModal} /> 
+       {' '}
     </SafeAreaView>
   );
 };
 
 // --- (Styles tetap sama) ---
+// --- (Styles untuk HomeScreen) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
