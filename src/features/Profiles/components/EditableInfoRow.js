@@ -1,91 +1,74 @@
 // src/features/Profiles/components/EditableInfoRow.js
 import React from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 
 const EditableInfoRow = ({
   label,
   value,
-  isEditing, // Prop baru: true jika mode edit
-  onChangeText, // Prop baru: fungsi untuk update nilai
-  showButton = false,
-  onButtonPress,
-  ...textInputProps // Props lain untuk TextInput (keyboardType, autoCapitalize, dll)
+  isEditing,
+  onChangeText,
+  placeholder,
+  isLast = false,
+  ...textInputProps
 }) => {
   return (
-    <View style={styles.infoRow}>
-      <View style={styles.infoTextContainer}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        {isEditing ? (
-          // --- Mode Edit ---
-          <TextInput
-            style={styles.input}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={label}
-            placeholderTextColor="#C0C0C0"
-            {...textInputProps} // Terapkan props keyboardType, dll.
-          />
-        ) : (
-          // --- Mode View ---
-          <Text style={styles.infoValue}>{value}</Text>
-        )}
-      </View>
-      {/* Tampilkan tombol hanya jika showButton=true DAN tidak sedang edit */}
-      {showButton && !isEditing && (
-        <TouchableOpacity style={styles.connectButton} onPress={onButtonPress}>
-          <Text style={styles.connectButtonText}>Connect</Text>
-        </TouchableOpacity>
+    <View style={[styles.row, isLast && styles.rowLast]}>
+      <Text style={styles.label}>{label}</Text>
+      {isEditing ? (
+        <TextInput
+          style={[styles.value, styles.input]}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder || `Masukkan ${label}...`}
+          placeholderTextColor="#B0B0B0"
+          autoCorrect={false}
+          {...textInputProps}
+        />
+      ) : (
+        <Text
+          style={[styles.value, !value && styles.emptyValue]}
+          numberOfLines={1}
+        >
+          {value || (label === 'Email' ? '...' : 'Belum diatur')}
+        </Text>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  infoRow: {
+  row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
   },
-  infoTextContainer: {
-    flex: 1,
-    marginRight: 10,
+  rowLast: {
+    borderBottomWidth: 0,
   },
-  infoLabel: {
-    fontSize: 13,
-    color: '#999',
-    marginBottom: 4,
+  label: {
+    fontSize: 14,
+    color: '#777',
+    flex: 2, // 40%
   },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: '500',
+  value: {
+    fontSize: 14,
     color: '#333',
+    flex: 3, // 60%
+    textAlign: 'right',
+    fontWeight: '500',
+  },
+  emptyValue: {
+    color: '#B0B0B0',
+    fontStyle: 'italic',
   },
   input: {
-    // Style untuk TextInput saat mode edit
-    fontSize: 16,
+    paddingVertical: 0, // Hapus padding default
+    paddingHorizontal: 0,
     fontWeight: '500',
-    color: '#333',
-    borderBottomWidth: 1,
-    borderColor: '#C0C0C0',
-    paddingVertical: 4,
-  },
-  connectButton: {
-    backgroundColor: '#6A453C',
-    paddingHorizontal: 15,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  connectButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    color: '#4A2F2F',
   },
 });
 

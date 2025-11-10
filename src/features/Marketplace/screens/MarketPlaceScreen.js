@@ -1,5 +1,5 @@
 // src/features/Marketplace/screens/MarketPlaceScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react'; // <<< 1. Import useMemo
 import {
   View,
   Text,
@@ -8,45 +8,45 @@ import {
   FlatList,
   StatusBar,
   TouchableOpacity,
-  ActivityIndicator, // <<< 1. Import
+  ActivityIndicator,
 } from 'react-native';
 import ProductCard from '../components/ProductCard';
-import { supabase } from '../../../services/supabaseClient'; // <<< 2. Import Supabase
-import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import Modal Error
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
+// <<< 2. IMPORT SEARCHBAR >>>
+import SearchBar from '../../Home/components/SearchBar';
 
 const MarketPlaceScreen = ({ navigation }) => {
-  // --- 4. State untuk data, loading, dan error ---
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
-  // --- 5. Fungsi untuk menampilkan error ---
+  // <<< 3. TAMBAHKAN STATE UNTUK SEARCH QUERY >>>
+  const [searchQuery, setSearchQuery] = useState('');
+
   const showError = (title, message) => {
+    // ... (Fungsi tetap sama)
     setModalTitle(title);
     setModalMessage(message);
     setModalVisible(true);
   };
 
-  // --- 6. Fungsi fetch data dari Supabase ---
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      // Ambil data dari tabel 'products'
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .order('created_at', { ascending: false }); // Urutkan berdasarkan terbaru
+        .order('created_at', { ascending: false });
 
       if (error) {
-        throw error; // Lempar error jika ada
+        throw error;
       }
-
-      // Pastikan data adalah array
       setProducts(data || []);
     } catch (error) {
-      setProducts([]); // Kosongkan data jika gagal
+      setProducts([]);
       showError(
         'Gagal Memuat Produk',
         `Terjadi kesalahan saat mengambil data: ${error.message}`,
@@ -56,23 +56,58 @@ const MarketPlaceScreen = ({ navigation }) => {
     }
   };
 
-  // --- 7. Panggil fetchProducts saat komponen dimuat ---
   useEffect(() => {
     fetchProducts();
   }, []);
 
-  // Fungsi navigasi (tidak berubah)
+  // <<< 4. BUAT LOGIKA FILTER DENGAN useMemo >>>
+  const filteredProducts = useMemo(() => {
+    if (!searchQuery) {
+      return products; // Kembalikan semua produk jika query kosong
+    }
+    const lowerCaseQuery = searchQuery.toLowerCase();
+    return products.filter(
+      product =>
+        product.name.toLowerCase().includes(lowerCaseQuery) ||
+        (product.category &&
+          product.category.toLowerCase().includes(lowerCaseQuery)),
+    );
+  }, [products, searchQuery]); // Dependensi: data asli dan query
+
   const handleProductPress = item => {
+    // ... (Fungsi tetap sama)
     navigation.navigate('ProductDetail', {
       productId: item.id,
-      itemData: item, // Kirim data lengkap ke detail
+      itemData: item,
     });
   };
 
-  // Render item (tidak berubah)
   const renderProductItem = ({ item }) => (
     <ProductCard item={item} onPress={handleProductPress} />
   );
+
+  // <<< 5. BUAT KOMPONEN UNTUK LIST KOSONG >>>
+  const renderEmptyComponent = () => {
+    if (loading) {
+      return null; // Jangan tampilkan apa-apa saat loading awal
+    }
+    // Jika ada query tapi tidak ada hasil
+    if (searchQuery) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            Produk "{searchQuery}" tidak ditemukan.
+          </Text>
+        </View>
+      );
+    }
+    // Jika tidak ada query dan data memang kosong
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>Belum ada produk yang dijual.</Text>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -90,34 +125,35 @@ const MarketPlaceScreen = ({ navigation }) => {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* --- 8. Tampilkan Loading atau Grid Produk --- */}
+      {/* <<< 6. TAMBAHKAN SEARCHBAR DI SINI >>> */}
+      <View style={styles.searchBarWrapper}>
+        <SearchBar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          placeholder="Cari produk di marketplace..."
+        />
+      </View>
+
+      {/* --- 7. Tampilkan Loading atau Grid Produk --- */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6A453C" />
         </View>
       ) : (
         <FlatList
-          data={products} // <<< Gunakan data dari state
+          data={filteredProducts} // <<< 8. GUNAKAN DATA YANG SUDAH DIFILTER
           renderItem={renderProductItem}
-          keyExtractor={item => item.id.toString()} // Pastikan ID jadi string
+          keyExtractor={item => item.id.toString()}
           numColumns={2}
           style={styles.gridList}
           contentContainerStyle={styles.gridContent}
-          // Tambahkan ini untuk refresh
           onRefresh={fetchProducts}
           refreshing={loading}
-          // Tampilkan pesan jika data kosong
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                Belum ada produk yang dijual.
-              </Text>
-            </View>
-          }
+          ListEmptyComponent={renderEmptyComponent} // <<< 9. Gunakan komponen empty
         />
       )}
 
-      {/* --- 9. Modal Error --- */}
+      {/* --- Modal Error --- */}
       <InfoModal
         isVisible={modalVisible}
         onClose={() => setModalVisible(false)}
@@ -144,13 +180,20 @@ const styles = StyleSheet.create({
   backButton: { padding: 5 },
   backButtonText: { fontSize: 24, color: '#FFFFFF', fontWeight: 'bold' },
   headerTitle: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
+
+  // <<< 10. STYLE BARU UNTUK SEARCHBAR WRAPPER >>>
+  searchBarWrapper: {
+    paddingVertical: 8, // Beri jarak atas bawah
+    backgroundColor: '#F4F4F4', // Samakan dengan background
+    paddingBottom: 4,
+  },
+
   gridList: {
     flex: 1,
   },
   gridContent: {
     padding: 9,
   },
-  // --- 10. Tambahkan style baru ---
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -161,15 +204,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 50,
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   emptyText: {
     fontSize: 16,
     color: '#888',
+    textAlign: 'center',
   },
-  // Style lama (dihapus karena tidak dipakai)
-  // tabContainer: { ... },
-  // tabActive: { ... },
-  // tabActiveText: { ... },
 });
 
 export default MarketPlaceScreen;

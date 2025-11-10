@@ -1,5 +1,5 @@
 // src/services/supabaseClient.js
-// import 'react-native-url-polyfill/auto'; // Pastikan ini ada di atas
+import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 

@@ -1,6 +1,6 @@
 // src/features/Auth/screens/LoginScreen.js
 
-import React, { useState, useRef } from 'react'; // <<< 1. IMPORT useRef
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
+  Alert, // <<< 1. PASTIKAN 'Alert' DI-IMPORT (walau kita pakai modal)
 } from 'react-native';
 
 import TimeTrackNameWhite from '../../../assets/images/TimeTrackNameWhite.svg';
@@ -37,7 +38,6 @@ const LoginScreen = ({ navigation }) => {
     modalType: 'error',
   });
 
-  // <<< 2. BUAT REF UNTUK INPUT PASSWORD >>>
   const passwordInputRef = useRef(null);
 
   const handleSupabaseError = error => {
@@ -61,7 +61,7 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleLogin = async () => {
-    // ... (Fungsi ini tetap sama)
+    // ... (Fungsi ini tetap sama, tidak diubah)
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
@@ -107,11 +107,60 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
+  // --- 2. FUNGSI BARU UNTUK LUPA PASSWORD ---
+  const handleForgotPassword = async () => {
+    if (loading) return; // Mencegah klik ganda saat loading
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setModalState({
+        isVisible: true,
+        title: 'Email Kosong',
+        message:
+          'Silakan masukkan email Anda di kolom email terlebih dahulu, lalu tekan "Lupa Password?".',
+        modalType: 'error',
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Ini adalah fungsi Supabase untuk mengirim Magic Link
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail);
+
+      if (error) {
+        throw error; // Lempar ke catch block
+      }
+
+      // Tampilkan pesan sukses
+      setModalState({
+        isVisible: true,
+        title: 'Cek Email Anda',
+        message:
+          'Link untuk reset password telah dikirim ke email Anda. Silakan cek inbox (dan folder spam).',
+        modalType: 'success', // Tampilkan modal sukses
+      });
+    } catch (error) {
+      console.error('Error Forgot Password:', error.message);
+      setModalState({
+        isVisible: true,
+        title: 'Gagal',
+        message:
+          'Gagal mengirim link reset password. Pastikan email yang Anda masukkan sudah benar dan terdaftar.',
+        modalType: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  // --- BATAS FUNGSI BARU ---
+
   const navigateToRegister = () => {
     navigation.navigate('Register');
   };
 
   const handleSocialLogin = provider => {
+    // ... (Fungsi ini tetap sama)
     console.log(`Login with ${provider}`);
     setModalState({
       isVisible: true,
@@ -149,7 +198,6 @@ const LoginScreen = ({ navigation }) => {
               keyboardType="email-address"
               autoCapitalize="none"
               returnKeyType="next"
-              // <<< 3. GUNAKAN REF.CURRENT.FOCUS() >>>
               onSubmitEditing={() => passwordInputRef.current?.focus()}
             />
           </View>
@@ -158,7 +206,6 @@ const LoginScreen = ({ navigation }) => {
             <Text style={styles.label}>Password</Text>
             <View style={styles.passwordInputContainer}>
               <TextInput
-                // <<< 4. PASANG REF DI SINI >>>
                 ref={passwordInputRef}
                 style={[styles.input, styles.passwordInput]}
                 placeholder="Enter your Password"
@@ -185,9 +232,20 @@ const LoginScreen = ({ navigation }) => {
             </View>
           </View>
 
+          {/* --- 3. TOMBOL BARU "LUPA PASSWORD?" --- */}
+          <TouchableOpacity
+            style={styles.forgotPasswordContainer}
+            onPress={handleForgotPassword}
+            disabled={loading}
+          >
+            <Text style={styles.forgotPasswordText}>Lupa Password?</Text>
+          </TouchableOpacity>
+          {/* --- BATAS TOMBOL BARU --- */}
+
           {/* Tombol Login */}
           <TouchableOpacity
-            style={styles.loginButton}
+            // --- 4. UBAH STYLE (Tambah margin) ---
+            style={[styles.loginButton, { marginTop: 10 }]} // Hapus margin top lama
             onPress={handleLogin}
             disabled={loading}
           >
@@ -244,7 +302,7 @@ const LoginScreen = ({ navigation }) => {
   );
 };
 
-// --- STYLES (Tetap sama) ---
+// --- STYLES ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -306,12 +364,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 3,
   },
+  // --- 5. STYLE BARU ---
+  forgotPasswordContainer: {
+    alignSelf: 'flex-end',
+    marginBottom: 15, // Jarak sebelum tombol Login
+    marginTop: -10, // Sedikit lebih dekat ke input password
+  },
+  forgotPasswordText: {
+    color: '#4A2F2F',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // --- BATAS STYLE BARU ---
   loginButton: {
     backgroundColor: '#6A453C',
     paddingVertical: 16,
     borderRadius: 15,
     alignItems: 'center',
-    marginTop: 10,
+    // marginTop: 10, // Dihapus dari sini, dipindah inline
     marginBottom: 20,
     elevation: 3,
     minHeight: 52,

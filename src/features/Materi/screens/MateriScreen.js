@@ -1,5 +1,5 @@
 // src/features/Materi/screens/MateriScreen.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,17 @@ import {
   StatusBar,
   TouchableOpacity,
   Image,
-  ActivityIndicator, // Untuk indikator loading
+  ActivityIndicator,
 } from 'react-native';
-import { supabase } from '../../../services/supabaseClient'; // Import Supabase
-import InfoModal from '../../../components/common/InfoModal'; // Import InfoModal
-import LoveIconActive from '../../../assets/icon/LoveIconActive.svg'; // Import ikon Like
-import LoveIconInactive from '../../../assets/icon/LoveIconInactive.svg'; // Import ikon Unlike
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
+import LoveIconActive from '../../../assets/icon/LoveIconActive.svg';
+import LoveIconInactive from '../../../assets/icon/LoveIconInactive.svg';
 import { updateTaskProgress } from '../../../services/taskService';
 
-// (Ikon lain masih menggunakan placeholder teks karena tidak ditemukan di file Anda)
-// import PlayIcon from '../../../assets/icons/PlayIcon.svg';
-// import SpeakerIcon from '../../../assets/icons/SpeakerIcon.svg';
+// Tentukan Waktu Minimum (mis: 3 Menit = 180000 ms)
+// Kita set 10 detik (10000 ms) untuk tes cepat. Ganti ke 180000 untuk produksi.
+const MIN_TIME_SPENT_MS = 10000; // 10 detik untuk tes
 
 const MateriScreen = ({ route, navigation }) => {
   // --- Ambil parameter ID dari navigasi ---
@@ -36,7 +36,13 @@ const MateriScreen = ({ route, navigation }) => {
     message: '',
   });
 
+  // --- State baru untuk logika task/koin ---
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+  const [hasTimeRequirementMet, setHasTimeRequirementMet] = useState(false);
   const [hasTaskBeenTriggered, setHasTaskBeenTriggered] = useState(false);
+
+  // Ref untuk menyimpan ID timer
+  const timerRef = useRef(null);
 
   // --- Fungsi untuk memuat data materi dan status favorit ---
   const fetchMateriData = useCallback(async () => {
@@ -57,7 +63,7 @@ const MateriScreen = ({ route, navigation }) => {
           categories ( name ),
           user_favorites ( count )
         `,
-        ) // <--- PERUBAHAN DI SINI
+        )
         .eq('id', materiId)
         .single();
 
@@ -74,7 +80,7 @@ const MateriScreen = ({ route, navigation }) => {
           .select('user_id')
           .eq('user_id', user.id)
           .eq('materi_id', materiData.id)
-          .maybeSingle(); // maybeSingle() tidak error jika tidak ada row
+          .maybeSingle();
 
         if (favoriteError) {
           console.error('Gagal mengecek favorit:', favoriteError.message);
@@ -106,13 +112,90 @@ const MateriScreen = ({ route, navigation }) => {
     }
   }, [materiId, fetchMateriData]); // Jalankan ulang jika ID berubah
 
-  // --- Handler untuk tombol Like/Unlike ---
+  // --- Logika Inti Pemicu Task ---
+  const tryCompleteTask = useCallback(
+    async triggerSource => {
+      // Cek apakah task sudah pernah dipicu
+      if (hasTaskBeenTriggered) {
+        return; // Sudah dipicu, jangan lakukan apa-apa
+      }
+
+      // Tentukan status saat ini berdasarkan pemicu
+      const isScrolled = triggerSource === 'scroll' || hasScrolledToBottom;
+      const isTimeMet = triggerSource === 'timer' || hasTimeRequirementMet;
+
+      // Cek apakah KEDUA syarat terpenuhi
+      if (isScrolled && isTimeMet) {
+        setHasTaskBeenTriggered(true);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
+
+        try {
+          // <<< UBAH BARIS INI (tambahkan 'materiId') >>>
+          const completedTask = await updateTaskProgress(
+            'read_materi',
+            materiId,
+          );
+
+          // Cek jika 'completedTask' tidak null dan memiliki elemen
+          if (completedTask && completedTask.length > 0) {
+            // Ambil hasil pertamanya
+            const taskResult = completedTask[0];
+            setModalInfo({
+              visible: true,
+              type: 'success',
+              title: taskResult.title, // Judul dari DB (mis: "Materi Selesai" atau "Tugas Harian Selesai")
+              message: `Anda mendapatkan ${taskResult.points_reward} poin!`,
+            });
+          }
+        } catch (error) {
+          console.error('Gagal memicu task:', error.message);
+        }
+      } else {
+        console.log(
+          `MateriScreen: Syarat belum terpenuhi (Scroll: ${isScrolled}, Waktu: ${isTimeMet})`,
+        );
+      }
+    },
+    [
+      hasTaskBeenTriggered,
+      hasScrolledToBottom,
+      hasTimeRequirementMet,
+      materiId,
+    ],
+  ); // <<< TAMBAHKAN 'materiId' di dependensi
+
+  // --- useEffect Baru (Untuk Timer) ---
+  useEffect(() => {
+    // Mulai timer hanya saat materi selesai loading
+    if (!loading && materi) {
+      console.log('MateriScreen: Timer dimulai...');
+      timerRef.current = setTimeout(() => {
+        console.log(
+          `MateriScreen: Waktu ${MIN_TIME_SPENT_MS / 1000} detik terpenuhi.`,
+        );
+        setHasTimeRequirementMet(true);
+        // Panggil pengecek task saat timer selesai
+        tryCompleteTask('timer');
+      }, MIN_TIME_SPENT_MS);
+    }
+
+    // Membersihkan timer jika pengguna meninggalkan layar
+    return () => {
+      if (timerRef.current) {
+        console.log('MateriScreen: Timer dibersihkan.');
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [loading, materi, tryCompleteTask]); // Tambahkan tryCompleteTask sebagai dependensi
+
+  // --- Handler untuk tombol Like/Unlike (Tetap Sama) ---
   const handleLike = async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Cek jika user belum login
     if (!user) {
       setModalInfo({
         visible: true,
@@ -129,13 +212,11 @@ const MateriScreen = ({ route, navigation }) => {
 
     try {
       if (newFavoriteStatus) {
-        // --- Tambahkan ke favorit ---
         const { error } = await supabase
           .from('user_favorites')
           .insert({ user_id: user.id, materi_id: materi.id });
         if (error) throw error;
       } else {
-        // --- Hapus dari favorit ---
         const { error } = await supabase
           .from('user_favorites')
           .delete()
@@ -155,37 +236,18 @@ const MateriScreen = ({ route, navigation }) => {
     }
   };
 
-  // --- Handler placeholder (belum diubah) ---
+  // --- Handler placeholder (Tetap Sama) ---
   const handlePlayVideo = () =>
     console.log('Play video', materi?.video_url || 'Tidak ada video');
   const handlePlayAudio = () =>
     console.log('Play audio', materi?.audio_url || 'Tidak ada audio');
 
-  // --- Handler untuk menutup modal ---
+  // --- Handler untuk menutup modal (Tetap Sama) ---
   const closeModal = () => {
     setModalInfo(prev => ({ ...prev, visible: false }));
   };
 
-  const handleCompleteReadTask = useCallback(async () => {
-    try {
-      // Panggil service, tentukan tipe task-nya 'read_materi'
-      const completedTask = await updateTaskProgress('read_materi');
-
-      // Jika fungsi mengembalikan data, berarti task baru saja selesai
-      if (completedTask) {
-        setModalInfo({
-          visible: true,
-          type: 'success', // Ganti tipe modal menjadi 'success'
-          title: 'Tugas Selesai!',
-          message: `Anda telah menyelesaikan tugas "${completedTask.title}" dan mendapatkan ${completedTask.points_reward} poin!`,
-        });
-      }
-    } catch (error) {
-      // Tidak perlu menampilkan error ke user untuk task
-      console.error('Gagal memicu task:', error.message);
-    }
-  }, []);
-
+  // --- Modifikasi handleScroll ---
   const handleScroll = event => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
 
@@ -193,17 +255,18 @@ const MateriScreen = ({ route, navigation }) => {
     const isCloseToBottom =
       layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
 
-    // Jika sudah di bawah DAN belum pernah di-trigger DAN tidak loading
-    if (isCloseToBottom && !loading && !hasTaskBeenTriggered) {
-      // 1. Tandai bahwa task sudah di-trigger
-      setHasTaskBeenTriggered(true);
+    // Jika sudah di bawah DAN belum pernah ditandai scroll
+    if (isCloseToBottom && !hasScrolledToBottom) {
+      console.log('MateriScreen: Scroll sudah di bawah.');
+      // 1. Tandai bahwa syarat scroll terpenuhi
+      setHasScrolledToBottom(true);
 
-      // 2. Panggil fungsi untuk update task
-      handleCompleteReadTask();
+      // 2. Panggil pengecek task
+      tryCompleteTask('scroll');
     }
   };
 
-  // --- Tampilan Loading ---
+  // --- Tampilan Loading (Tetap Sama) ---
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -217,7 +280,7 @@ const MateriScreen = ({ route, navigation }) => {
     );
   }
 
-  // --- Tampilan Jika Materi Tidak Ditemukan ---
+  // --- Tampilan Jika Materi Tidak Ditemukan (Tetap Sama) ---
   if (!materi) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -252,7 +315,7 @@ const MateriScreen = ({ route, navigation }) => {
     );
   }
 
-  // --- Ambil data dari state 'materi' (setelah loading) ---
+  // --- Ambil data dari state 'materi' (Tetap Sama) ---
   const { title, image_url, video_thumbnail_url, summary, likes } = materi;
   const imageSource = image_url ? { uri: image_url } : null;
   const videoThumbSource = video_thumbnail_url
@@ -262,7 +325,7 @@ const MateriScreen = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-      {/* Header dengan tombol kembali dan judul dinamis */}
+      {/* Header (Tetap Sama) */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -280,10 +343,10 @@ const MateriScreen = ({ route, navigation }) => {
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
+        onScroll={handleScroll} // <<< onScroll sudah benar
+        scrollEventThrottle={16} // <<< scrollEventThrottle sudah benar
       >
-        {/* Gambar Utama dengan Tombol Like */}
+        {/* Gambar Utama dengan Tombol Like (Tetap Sama) */}
         {imageSource && (
           <View style={styles.imageContainer}>
             <Image
@@ -292,10 +355,6 @@ const MateriScreen = ({ route, navigation }) => {
               resizeMode="cover"
             />
             <TouchableOpacity style={styles.likeButton} onPress={handleLike}>
-              {/* Data 'likes' dari DB (jika Anda ingin menampilkannya) */}
-              {/* <Text style={styles.likeCount}>{likes}</Text> */}
-
-              {/* --- Ikon Hati Dinamis --- */}
               {isFavorite ? (
                 <LoveIconActive width={22} height={22} />
               ) : (
@@ -305,10 +364,10 @@ const MateriScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Judul Konten */}
+        {/* Judul Konten (Tetap Sama) */}
         <Text style={styles.contentTitle}>{title}</Text>
 
-        {/* Video Thumbnail (jika ada) */}
+        {/* Video Thumbnail (jika ada) (Tetap Sama) */}
         {videoThumbSource && (
           <TouchableOpacity
             style={styles.videoContainer}
@@ -330,14 +389,13 @@ const MateriScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         )}
 
-        {/* Ringkasan */}
+        {/* Ringkasan (Tetap Sama) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ringkasan</Text>
           <Text style={styles.summaryText}>{summary}</Text>
         </View>
 
-        {/* Interaktivitas (Audio) */}
-        {/* Tambahkan cek jika materi.audio_url ada */}
+        {/* Interaktivitas (Audio) (Tetap Sama) */}
         {materi.audio_url && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Interaktivitas</Text>
@@ -360,11 +418,11 @@ const MateriScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Spacer Bawah */}
+        {/* Spacer Bawah (Tetap Sama) */}
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      {/* --- Pop Up Modal --- */}
+      {/* --- Pop Up Modal (Tetap Sama) --- */}
       <InfoModal
         visible={modalInfo.visible}
         title={modalInfo.title}
@@ -376,14 +434,14 @@ const MateriScreen = ({ route, navigation }) => {
   );
 };
 
-// --- STYLES (Sama seperti yang Anda berikan, ditambah loadingContainer) ---
+// --- STYLES (Tetap Sama) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF', // Latar belakang putih saat loading
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
@@ -413,16 +471,15 @@ const styles = StyleSheet.create({
   mainImage: { width: '100%', height: 250 },
   likeButton: {
     position: 'absolute',
-    bottom: 12, // Disesuaikan agar lebih rapi
+    bottom: 12,
     right: 15,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20, // Bulat sempurna
-    width: 40, // Ukuran tetap
+    borderRadius: 20,
+    width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // likeCount: { color: '#FFFFFF', fontSize: 12, marginRight: 5 }, // Dihapus sementara
   likeIconPlaceholder: {
     width: 18,
     height: 18,
@@ -454,7 +511,7 @@ const styles = StyleSheet.create({
   playIconPlaceholder: {
     backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 30,
-    width: 60, // Perbesar sedikit
+    width: 60,
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',

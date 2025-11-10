@@ -134,7 +134,6 @@ const AppNavigator = ({ session }) => {
             />
           </RootStack.Group>
         ) : (
-          // --- GRUP LAYAR JIKA BELUM LOGIN ---
           <RootStack.Group>
             <RootStack.Screen name="Auth" component={AuthNavigator} />
           </RootStack.Group>

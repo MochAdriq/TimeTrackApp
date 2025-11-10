@@ -1,49 +1,53 @@
 // src/features/Home/components/SearchBar.js
 
-import React, { useState } from 'react';
+import React from 'react'; // <<< Hapus useState
 import {
   View,
   TextInput,
   TouchableOpacity,
   Text,
   StyleSheet,
-  Image,
+  // Image, // Hapus jika tidak dipakai
 } from 'react-native';
 
 import SearchIcon from '../../../assets/icon/SearchIcon.svg';
 
-const SearchBar = ({ onSearch }) => {
-  const [query, setQuery] = useState('');
+// <<< 1. UBAH PROPS: Terima 'searchQuery' dan 'setSearchQuery' >>>
+const SearchBar = ({
+  searchQuery,
+  setSearchQuery,
+  placeholder = 'Jelajahi Sejarah...',
+}) => {
+  // const [query, setQuery] = useState(''); // Hapus state internal
 
   const handleSearchPress = () => {
-    if (onSearch) {
-      onSearch(query);
-    }
+    // Tombol "Cari" sekarang opsional, bisa dihapus jika filter live
+    // Jika ingin tetap ada:
+    // if (onSearch) {
+    //   onSearch(searchQuery);
+    // }
+    console.log('Tombol Cari ditekan, query:', searchQuery);
   };
 
   return (
-    // Container utama (relative positioning context)
     <View style={styles.container}>
-      {/* Wrapper untuk Input dan Ikon */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
-          placeholder="Jelajahi Sejarah..."
+          placeholder={placeholder} // <<< 3. Gunakan placeholder dinamis
           placeholderTextColor="#B0B0B0"
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={handleSearchPress}
+          value={searchQuery} // <<< 2. Gunakan props 'searchQuery'
+          onChangeText={setSearchQuery} // <<< 2. Gunakan props 'setSearchQuery'
+          onSubmitEditing={handleSearchPress} // Tetap
         />
-        {/* Ikon Search */}
         <View style={styles.iconContainer}>
-          {/* Ganti dengan Image */}
           <View style={styles.iconPlaceholder}>
             <SearchIcon />
           </View>
         </View>
       </View>
 
-      {/* Tombol Cari (Diposisikan Absolut) */}
+      {/* Tombol "Cari" bisa di-disable/sembunyikan jika kita filter live */}
       <TouchableOpacity style={styles.searchButton} onPress={handleSearchPress}>
         <Text style={styles.searchButtonText}>Cari</Text>
       </TouchableOpacity>
@@ -51,6 +55,7 @@ const SearchBar = ({ onSearch }) => {
   );
 };
 
+// ... (Styles tetap sama)
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row', // Tetap row
@@ -58,7 +63,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 15, // Margin samping
     height: 55, // Tinggi total
     position: 'relative', // Konteks untuk positioning absolut tombol
-    // Hapus background & border radius dari sini
   },
   inputWrapper: {
     flex: 1, // Mengisi ruang sisa

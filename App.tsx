@@ -1,42 +1,48 @@
 // App.tsx
+import 'react-native-url-polyfill/auto'; // <<< Tetap di baris 1
 import React, { useState, useEffect } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from './src/services/supabaseClient'; // <<< Import Supabase
-import AppNavigator from './src/navigation/AppNavigator'; // <<< Import navigator Anda
-import { View, ActivityIndicator, StatusBar } from 'react-native'; // <<< Untuk loading
-import { GestureHandlerRootView } from 'react-native-gesture-handler'; // <<< Tetap pakai ini
-import { SafeAreaProvider } from 'react-native-safe-area-context'; // <<< Tetap pakai ini
+import { supabase } from './src/services/supabaseClient';
+import AppNavigator from './src/navigation/AppNavigator';
+import { View, ActivityIndicator, StatusBar } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { NotificationProvider } from './src/context/NotificationContext';
+// <<< 1. IMPORT PROFILE PROVIDER BARU >>>
+import { ProfileProvider } from './src/context/ProfileContext';
 
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Cek sesi yang sudah ada saat aplikasi pertama kali dimuat
+    // ... (Logika auth Anda tetap sama) ...
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false); // Selesai loading
+      setLoading(false);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session); // Update state session
-      },
-    );
+    const {
+      data: { subscription: authListener },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
     return () => {
       authListener?.unsubscribe();
     };
-  }, []); // [] = Jalankan sekali
+  }, []);
 
   if (loading) {
+    // ... (Loading UI tetap sama) ...
     return (
       <View
         style={{
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: '#6A453C', // Warna background
+          backgroundColor: '#6A453C',
         }}
       >
         <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
@@ -48,7 +54,12 @@ const App = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppNavigator session={session} />
+        <NotificationProvider session={session}>
+          {/* <<< 2. BUNGKUS DENGAN PROFILE PROVIDER >>> */}
+          <ProfileProvider session={session}>
+            <AppNavigator session={session} />
+          </ProfileProvider>
+        </NotificationProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

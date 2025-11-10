@@ -1,5 +1,5 @@
 // src/navigation/CustomDrawerContent.js
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,25 +7,28 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  Alert, // Import Alert untuk konfirmasi logout
+  Alert,
+  Image,
+  Share, // <<< 1. IMPORT Share API
 } from 'react-native';
-import {
-  DrawerContentScrollView,
-  // DrawerItemList,
-} from '@react-navigation/drawer';
+import { DrawerContentScrollView } from '@react-navigation/drawer';
 
-// --- Import Supabase ---
+// --- Import Supabase (hanya untuk logout) ---
 import { supabase } from '../services/supabaseClient';
 
-import ProfilePict from '../assets/images/ProfilePict.svg';
+// --- Import Context ---
+import { useProfile } from '../context/ProfileContext';
+
+// --- Import Ikon SVG ---
 import CartIcon from '../assets/icon/CartIcon.svg';
 import SettingIcon from '../assets/icon/SettingIcon.svg';
 import ChatIcon from '../assets/icon/ChatIcon.svg';
 import InfoIcon from '../assets/icon/InfoIcon.svg';
 import FriendIcon from '../assets/icon/FriendIcon.svg';
 import BackDrawerIcon from '../assets/icon/BackDrawerIcon.svg';
+const fallbackImage = require('../assets/images/dummyImage2.png');
 
-// Komponen Item Menu (agar bisa dipakai ulang)
+// Komponen Item Menu (Tidak diubah)
 const DrawerItem = ({ icon, label, onPress }) => (
   <TouchableOpacity style={styles.menuItem} onPress={onPress}>
     <View style={styles.menuIconContainer}>{icon}</View>
@@ -35,47 +38,14 @@ const DrawerItem = ({ icon, label, onPress }) => (
 
 const CustomDrawerContent = props => {
   const { navigation } = props;
-
-  // --- MODIFIKASI 1: State untuk data profil nyata ---
-  const [profile, setProfile] = useState({
-    name: 'Tamu',
-    level: 0,
-    points: 0,
-    avatar_url: null,
-  });
-
-  // --- MODIFIKASI 2: Fetch Data Profil ---
-  useEffect(() => {
-    const fetchProfileData = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('full_name, username, level, points, avatar_url')
-          .eq('id', user.id)
-          .single();
-
-        if (data && !error) {
-          setProfile({
-            name: data.full_name || data.username || 'Pengguna',
-            level: data.level || 1,
-            points: data.points || 0,
-            avatar_url: data.avatar_url,
-          });
-        }
-      }
-    };
-    fetchProfileData();
-  }, []); // Jalankan saat komponen dimuat
+  const { profile } = useProfile();
 
   const handleNavigation = screenName => {
     navigation.navigate(screenName);
     navigation.closeDrawer();
   };
 
-  // --- MODIFIKASI 3: Logika Logout Nyata ---
+  // --- (Fungsi handleLogout tetap sama) ---
   const handleLogout = () => {
     Alert.alert(
       'Konfirmasi Keluar',
@@ -89,7 +59,6 @@ const CustomDrawerContent = props => {
             if (error) {
               Alert.alert('Logout Gagal', error.message);
             } else {
-              // Jika sukses, App.tsx akan otomatis pindah ke Auth stack
               navigation.closeDrawer();
             }
           },
@@ -99,27 +68,42 @@ const CustomDrawerContent = props => {
     );
   };
 
-  // Menentukan sumber gambar avatar
+  // <<< 2. BUAT FUNGSI BARU UNTUK SHARE >>>
+  const handleShareApp = async () => {
+    try {
+      // Gunakan link website yang Boss berikan
+      const websiteUrl = 'https://web-time-track.vercel.app/';
+
+      await Share.share({
+        title: 'Gabung Yuk di TimeTrackApp!',
+        message: `Ayo belajar sejarah dengan cara yang seru di TimeTrackApp! 🚀\n\nCek di sini: ${websiteUrl}`,
+        url: websiteUrl, // url (untuk iOS)
+      });
+    } catch (error) {
+      Alert.alert('Gagal Membagikan', error.message);
+    }
+  };
+
+  // --- (Logika avatarSource dan handleProfileTap tetap sama) ---
   const avatarSource = profile.avatar_url
     ? { uri: profile.avatar_url }
-    : ProfilePict;
+    : fallbackImage;
 
-  // Aksi saat bagian profil ditekan
   const handleProfileTap = () => {
-    // handleNavigation('Profile'); // Navigasi ke main Profile Screen (bottom tab)
+    navigation.navigate('Profil');
+    navigation.closeDrawer();
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
 
-      {/* Bagian Atas Melengkung (Profil) */}
+      {/* ... (Bagian ProfileSection tetap sama) ... */}
       <TouchableOpacity
         style={styles.profileSection}
-        onPress={handleProfileTap} // MODIFIKASI 4: Profile bisa di-tap
+        onPress={handleProfileTap}
         activeOpacity={0.8}
       >
-        {/* Tombol Kembali (Close Drawer) */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.closeDrawer()}
@@ -131,23 +115,13 @@ const CustomDrawerContent = props => {
             style={styles.backIconSvg}
           />
         </TouchableOpacity>
-
-        {/* Info Profil */}
         <View style={styles.profileInfo}>
-          {/* Ganti View/Placeholder dengan Image dinamis */}
           <View style={styles.profilePicWrapper}>
-            <ProfilePict
-              width={70}
-              height={70}
-              style={styles.profilePicPlaceholder}
-            />
-            {/* Jika Anda ingin menggunakan Image dari URL:
             <Image source={avatarSource} style={styles.profilePicImage} />
-            */}
           </View>
           <View style={styles.profileText}>
             <Text style={styles.profileName} numberOfLines={1}>
-              Hi, {profile.name}
+              Hi, {profile.full_name || profile.username}
             </Text>
             <Text style={styles.profileSubtext}>Good Morning</Text>
             <View style={styles.levelContainer}>
@@ -163,23 +137,22 @@ const CustomDrawerContent = props => {
         </View>
       </TouchableOpacity>
 
-      {/* Konten Scrollable (Menu) */}
       <DrawerContentScrollView
         {...props}
         contentContainerStyle={styles.scrollContainer}
       >
-        {/* Tombol Custom (Beli Buku, Daftar Member) */}
+        {/* ... (Bagian customButtonsContainer tetap sama) ... */}
         <View style={styles.customButtonsContainer}>
           <TouchableOpacity
             style={styles.customButton}
-            onPress={() => handleNavigation('MarketPlace')} // Rute yang paling mungkin
+            onPress={() => handleNavigation('MarketPlace')}
           >
             <Text style={styles.customButtonText}>Beli buku</Text>
             <Text style={styles.customButtonArrow}>{'>'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.customButton}
-            // onPress={() => handleNavigation('Premium')} // Rute yang paling mungkin
+            // onPress={() => handleNavigation('Premium')}
           >
             <Text style={styles.customButtonText}>Daftar Member</Text>
             <Text style={styles.customButtonArrow}>{'>'}</Text>
@@ -191,32 +164,33 @@ const CustomDrawerContent = props => {
           <DrawerItem
             icon={<CartIcon width={24} height={24} fill="#fff" />}
             label="Pembelian"
-            onPress={() => handleNavigation('MarketPlace')} // Rute Marketplace
+            onPress={() => handleNavigation('MarketPlace')}
           />
           <DrawerItem
             icon={<SettingIcon width={24} height={24} fill="#fff" />}
             label="Pengaturan"
-            // onPress={() => handleNavigation('PlaceholderScreen')} // Rute Placeholder
+            // onPress={() => handleNavigation('PlaceholderScreen')}
           />
+          {/* <<< 3. HUBUNGKAN onPress KE FUNGSI BARU >>> */}
           <DrawerItem
             icon={<FriendIcon width={24} height={24} fill="#fff" />}
             label="Share ke Teman"
-            onPress={() => console.log('Share pressed')} // Logika share API
+            onPress={handleShareApp}
           />
           <DrawerItem
             icon={<ChatIcon width={24} height={24} fill="#fff" />}
             label="Diskusi"
-            onPress={() => handleNavigation('DiscussionChoice')} // Rute Discussion
+            onPress={() => handleNavigation('DiscussionChoice')}
           />
           <DrawerItem
             icon={<InfoIcon width={24} height={24} fill="#fff" />}
             label="Bantuan"
-            // onPress={() => handleNavigation('PlaceholderScreen')} // Rute Placeholder
+            // onPress={() => handleNavigation('PlaceholderScreen')}
           />
         </View>
       </DrawerContentScrollView>
 
-      {/* Bagian Bawah (Logout) */}
+      {/* ... (Bagian bottomSection (Logout) tetap sama) ... */}
       <View style={styles.bottomSection}>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <View style={styles.logoutIconPlaceholder} />
@@ -227,7 +201,7 @@ const CustomDrawerContent = props => {
   );
 };
 
-// --- STYLES ---
+// --- (Styles tetap sama) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -235,20 +209,18 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     backgroundColor: '#6A453C',
-    paddingTop: StatusBar.currentHeight || 20,
+    paddingTop: (StatusBar.currentHeight || 20) + 10,
     paddingBottom: 40,
     paddingHorizontal: 20,
   },
   backButton: {
     position: 'absolute',
-    top: 30,
+    top: (StatusBar.currentHeight || 20) + 5,
     left: 15,
     padding: 5,
     zIndex: 1,
   },
-  backIconSvg: {
-    // Gunakan style ini jika ikon svg Anda tidak memiliki offset
-  },
+  backIconSvg: {},
   profileInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -257,13 +229,13 @@ const styles = StyleSheet.create({
   profilePicWrapper: {
     marginRight: 15,
   },
-  profilePicPlaceholder: {
+  profilePicImage: {
     width: 70,
     height: 70,
     borderRadius: 35,
     borderWidth: 2,
     borderColor: '#FFF',
-    backgroundColor: '#FFF',
+    backgroundColor: '#E0E0E0',
   },
   profileText: {
     flex: 1,
@@ -359,7 +331,6 @@ const styles = StyleSheet.create({
     marginRight: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    // Background putih kecil agar ikon SVG terlihat jelas
     backgroundColor: '#F5F5F5',
     borderRadius: 5,
   },
@@ -388,7 +359,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     marginRight: 15,
-    backgroundColor: '#888', // Placeholder untuk ikon
+    backgroundColor: '#888',
     borderRadius: 10,
   },
   logoutText: {

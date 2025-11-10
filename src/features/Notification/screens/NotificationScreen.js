@@ -1,80 +1,35 @@
 // src/features/Notifications/screens/NotificationScreen.js
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   StatusBar,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import NotificationItem from '../components/NotifikationItem'; // Import item
+import NotificationItem from '../components/NotifikationItem'; // <<< Nama file Boss
+import { supabase } from '../../../services/supabaseClient';
+import { useNotification } from '../../../context/NotificationContext';
 
-// --- Data Dummy ---
-const dummyNotifications = [
-  // Hari ini
-  {
-    id: '1',
-    type: 'reminder',
-    title: 'Saatnya membaca',
-    message: 'Pelajari lebih lanjut mengenai bacaan yang terakhir kali dibaca',
-    time: '2min ago',
-    badgeCount: 2,
-    dateGroup: 'Hari ini',
-  },
-  {
-    id: '2',
-    type: 'task',
-    title: 'Saatnya mengerjakan tugas',
-    message: 'Pelajari lebih lanjut mengenai tugas yang belum dikerjakan',
-    time: '14min ago',
-    badgeCount: 0,
-    dateGroup: 'Hari ini',
-  },
-  {
-    id: '3',
-    type: 'reminder',
-    title: 'Saatnya membaca',
-    message: 'Pelajari lebih lanjut mengenai bacaan yang terakhir kali dibaca',
-    time: '9min ago',
-    badgeCount: 3,
-    dateGroup: 'Hari ini',
-  }, // Duplikat judul sengaja
-  // Kemarin
-  {
-    id: '4',
-    type: 'task',
-    title: 'Pengingat mengerjakan tugas',
-    message: 'Pelajari lebih lanjut mengenai pengingat mengerjakan tugas',
-    time: '30min ago',
-    badgeCount: 1,
-    dateGroup: 'Kemarin',
-  },
-  {
-    id: '5',
-    type: 'task',
-    title: 'Pengingat mengerjakan tugas',
-    message: 'Pelajari lebih lanjut mengenai pengingat mengerjakan tugas',
-    time: '58min ago',
-    badgeCount: 0,
-    dateGroup: 'Kemarin',
-  },
-  {
-    id: '6',
-    type: 'reminder',
-    title: 'Pengingat saatnya membaca',
-    message: 'Pelajari lebih lanjut mengenai pengingat saatnya membaca',
-    time: '45min ago',
-    badgeCount: 2,
-    dateGroup: 'Kemarin',
-  },
-];
+// --- Fungsi Grouping (Tetap sama) ---
+const groupNotificationsByDate = data => {
+  const today = new Date().setHours(0, 0, 0, 0);
+  const yesterday = new Date(today).setDate(new Date(today).getDate() - 1);
 
-// Fungsi untuk mengelompokkan data
-const groupNotifications = data => {
   return data.reduce((acc, notification) => {
-    const group = notification.dateGroup;
+    const notifDate = new Date(notification.created_at).setHours(0, 0, 0, 0);
+    let group = 'Sebelumnya';
+
+    if (notifDate === today) {
+      group = 'Hari ini';
+    } else if (notifDate === yesterday) {
+      group = 'Kemarin';
+    }
+
     if (!acc[group]) {
       acc[group] = [];
     }
@@ -83,16 +38,70 @@ const groupNotifications = data => {
   }, {});
 };
 
+// --- Fungsi Format Waktu (Tetap sama) ---
+const formatTime = isoString => {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const diffInDays = Math.floor(diffInHours / 24);
+
+  if (diffInMinutes < 1) return 'Baru saja';
+  if (diffInMinutes < 60) return `${diffInMinutes}m lalu`;
+  if (diffInHours < 24) return `${diffInHours}j lalu`;
+  if (diffInDays === 1) return 'Kemarin';
+  return `${diffInDays}h lalu`;
+};
+
 const NotificationScreen = ({ navigation }) => {
-  const groupedData = groupNotifications(dummyNotifications);
-  const sections = Object.keys(groupedData); // Ambil nama grup ('Hari ini', 'Kemarin')
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { markAllAsRead } = useNotification();
+
+  const fetchNotifications = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) {
+      setLoading(true);
+    }
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setNotifications(data || []);
+    } catch (error) {
+      console.error('Error fetching notifications:', error.message);
+    } finally {
+      if (!isRefresh) {
+        setLoading(false);
+      }
+      setRefreshing(false);
+    }
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchNotifications(true); // Panggil fetch data
+    markAllAsRead(); // Juga tandai sudah dibaca saat refresh
+  }, [fetchNotifications, markAllAsRead]);
+
+  useEffect(() => {
+    fetchNotifications(false); // Panggilan awal
+    markAllAsRead();
+  }, [fetchNotifications, markAllAsRead]);
+
+  const groupedData = groupNotificationsByDate(notifications);
+  const sections = Object.keys(groupedData);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header Bawaan Sementara (Ganti dengan header kustom jika perlu) */}
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.header}>
-        {/* Tombol kembali (butuh navigation) */}
+        {/* ... (Header tetap sama) ... */}
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
@@ -100,37 +109,69 @@ const NotificationScreen = ({ navigation }) => {
           <Text style={styles.backButtonText}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifikasi</Text>
-        <View style={{ width: 40 }} /> {/* Spacer agar judul di tengah */}
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {sections.map(sectionTitle => (
-          <View key={sectionTitle} style={styles.section}>
-            <Text style={styles.sectionTitle}>{sectionTitle}</Text>
-            {groupedData[sectionTitle].map(item => (
-              <NotificationItem
-                key={item.id}
-                type={item.type}
-                title={item.title}
-                message={item.message}
-                time={item.time}
-                badgeCount={item.badgeCount}
-              />
-            ))}
-          </View>
-        ))}
-      </ScrollView>
+      {/* Tampilkan loading HANYA jika bukan sedang refreshing */}
+      {loading && !refreshing ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#6A453C" />
+        </View>
+      ) : sections.length === 0 ? (
+        <ScrollView
+          contentContainerStyle={styles.centered}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#6A453C']}
+              tintColor={'#6A453C'}
+            />
+          }
+        >
+          <Text style={styles.emptyText}>Tidak ada notifikasi.</Text>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#6A453C']}
+              tintColor={'#6A453C'}
+            />
+          }
+        >
+          {sections.map(sectionTitle => (
+            <View key={sectionTitle} style={styles.section}>
+              <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+              {groupedData[sectionTitle].map(item => (
+                // <<< 1. MODIFIKASI DI SINI: Kirim 'item' utuh >>>
+                <NotificationItem
+                  key={item.id}
+                  item={{
+                    ...item,
+                    time: formatTime(item.created_at), // Format waktu
+                    badgeCount: !item.is_read ? 1 : 0, // Hitung badge
+                  }}
+                />
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
 
+// ... (Styles tetap sama)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F4F4F4', // Background abu-abu muda
+    backgroundColor: '#F4F4F4',
   },
   header: {
-    // Header sederhana
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -153,8 +194,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#888',
+  },
   scrollContainer: {
     padding: 15,
+    flexGrow: 1,
   },
   section: {
     marginBottom: 20,
@@ -164,7 +215,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#555',
     marginBottom: 10,
-    marginLeft: 5, // Sedikit indentasi judul section
+    marginLeft: 5,
   },
 });
 

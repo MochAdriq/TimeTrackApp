@@ -85,19 +85,19 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   const handleRegister = async () => {
-    // ... (Fungsi handleRegister tetap sama)
     const trimmedEmail = email.trim();
     const trimmedUsername = username.trim().toLowerCase();
     const trimmedFullName = fullName.trim();
-    const trimmedPhoneNumber = phoneNumber.trim();
+    const trimmedPhoneNumber = phoneNumber.trim(); // <<< AMBIL NOMOR TELEPON
     const trimmedPassword = password.trim();
 
+    // Validasi
     if (
       !trimmedEmail ||
       !trimmedPassword ||
       !trimmedFullName ||
       !trimmedUsername ||
-      !trimmedPhoneNumber
+      !trimmedPhoneNumber // <<< Validasi nomor telepon
     ) {
       setModalState({
         isVisible: true,
@@ -123,11 +123,12 @@ const RegisterScreen = ({ navigation }) => {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: trimmedEmail,
         password: trimmedPassword,
-        phone: trimmedPhoneNumber,
+        phone: trimmedPhoneNumber, // <<< Simpan ke auth.users
         options: {
           data: {
             full_name: trimmedFullName,
             username: trimmedUsername,
+            mobile_no: trimmedPhoneNumber, // <<< PERBAIKAN: Simpan ke public.profiles
           },
         },
       });
@@ -135,7 +136,6 @@ const RegisterScreen = ({ navigation }) => {
       if (authError) {
         throw authError;
       }
-
       if (!authData.user) {
         throw new Error(
           'Gagal membuat akun, user tidak ditemukan setelah daftar.',
@@ -147,14 +147,14 @@ const RegisterScreen = ({ navigation }) => {
         isVisible: true,
         title: 'Pendaftaran Berhasil!',
         message:
-          'Akun Anda telah dibuat. Silakan cek email untuk konfirmasi sebelum login.',
+          'Akun Anda telah dibuat. Silakan cek email Anda untuk link konfirmasi sebelum login.',
         modalType: 'success',
         onClose: () => navigation.navigate('Login'),
       });
     } catch (error) {
       setLoading(false);
       const friendlyError = handleSupabaseError(error);
-      console.error('Error Registrasi:', error.message);
+      console.error('Error Registrasi (Magic Link):', error.message);
       setModalState({
         isVisible: true,
         title: 'Pendaftaran Gagal',

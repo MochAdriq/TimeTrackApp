@@ -1,23 +1,28 @@
-// src/features/Notifications/components/NotificationItem.js
+// src/features/Notification/components/NotificationItem.js
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-// Nanti import ikon SVG/Image di sini
-// import TaskIcon from '../../../assets/icons/TaskIcon.svg';
+// <<< 1. IMPORT TouchableOpacity dan useNavigation >>>
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
-import BellTaskIcon from '../../../assets/icon/BellTaskIcon.svg'; // <<< Tambah .svg
-import TaskIcon from '../../../assets/icon/TaskIcon.svg'; // <<< Tambah .svg
+// --- Import Ikon ---
+import BellTaskIcon from '../../../assets/icon/BellTaskIcon.svg';
+import TaskIcon from '../../../assets/icon/TaskIcon.svg';
+import ChatIcon from '../../../assets/icon/ChatIcon.svg'; // <<< 2. IMPORT IKON CHAT
 
 // Fungsi helper untuk menentukan ikon (contoh)
 const getIcon = type => {
   if (type === 'reminder') {
-    // return <BellIcon width={24} height={24} fill="#FF6B6B" />; // Contoh warna merah
-    return '🔔'; // Placeholder
+    // return <BellIcon width={24} height={24} fill="#FF6B6B" />;
+    return <BellTaskIcon width={24} height={24} />; // Placeholder
   } else if (type === 'task') {
-    // return <TaskIcon width={24} height={24} fill="#4ECDC4" />; // Contoh warna tosca
-    return '📝'; // Placeholder
+    // return <TaskIcon width={24} height={24} fill="#4ECDC4" />;
+    return <TaskIcon width={24} height={24} />; // Placeholder
+  } else if (type === 'chat') {
+    // <<< 3. TAMBAHKAN CASE UNTUK 'chat' >>>
+    return <ChatIcon width={24} height={24} fill="#4A90E2" />;
   } else {
     // return <DefaultIcon width={24} height={24} fill="#888" />;
-    return '⚪'; // Placeholder default
+    return <BellTaskIcon width={24} height={24} />; // Default
   }
 };
 
@@ -25,12 +30,38 @@ const getIcon = type => {
 const getIconBackground = type => {
   if (type === 'reminder') return '#FFEBEE'; // Merah muda
   if (type === 'task') return '#E0F2F7'; // Biru muda
+  if (type === 'chat') return '#E7F0FD'; // <<< 4. TAMBAHKAN CASE UNTUK 'chat'
   return '#EEEEEE'; // Abu-abu
 };
 
-const NotificationItem = ({ type, title, message, time, badgeCount }) => {
+// <<< 5. UBAH PROPS: Terima 'item' lengkap, bukan properti terpisah >>>
+const NotificationItem = ({ item }) => {
+  const navigation = useNavigation();
+
+  // <<< 6. BUAT FUNGSI handlePress UNTUK NAVIGASI >>>
+  const handlePress = () => {
+    const screen = item.navigation_screen;
+    const params = item.navigation_params;
+
+    // Cek jika ada data navigasi di notifikasi
+    if (screen) {
+      console.log(`Navigasi ke: ${screen} dengan params:`, params);
+      navigation.navigate(screen, params);
+    } else {
+      console.log('Notifikasi ini tidak memiliki aksi navigasi.');
+    }
+  };
+
+  // Ambil data dari item
+  const { type, title, message, time, badgeCount } = item;
+
   return (
-    <View style={styles.container}>
+    // <<< 7. UBAH View MENJADI TouchableOpacity >>>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
       {/* Ikon */}
       <View
         style={[
@@ -38,26 +69,27 @@ const NotificationItem = ({ type, title, message, time, badgeCount }) => {
           { backgroundColor: getIconBackground(type) },
         ]}
       >
-        {/* Panggil fungsi getIcon atau render SVG/Image langsung */}
-        <Text style={styles.iconPlaceholder}>{getIcon(type)}</Text>
+        <View style={styles.iconPlaceholder}>{getIcon(type)}</View>
       </View>
 
       {/* Teks Notifikasi */}
       <View style={styles.textContainer}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.message}>{message}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.message} numberOfLines={2}>
+          {message}
+        </Text>
       </View>
 
       {/* Waktu & Badge */}
       <View style={styles.metaContainer}>
         <Text style={styles.time}>{time}</Text>
         {badgeCount > 0 && ( // Tampilkan badge jika count > 0
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badgeCount}</Text>
-          </View>
+          <View style={styles.badge} /> // <<< 8. Ubah jadi titik saja
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -105,6 +137,7 @@ const styles = StyleSheet.create({
   },
   metaContainer: {
     alignItems: 'flex-end', // Rata kanan
+    minWidth: 50, // <<< Beri lebar minimum
   },
   time: {
     fontSize: 11,
@@ -112,19 +145,12 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   badge: {
-    backgroundColor: '#4CAF50', // Warna badge hijau (sesuaikan)
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#FF0000', // Merah
+    borderRadius: 6,
+    width: 12,
+    height: 12,
   },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
+  badgeText: {},
 });
 
 export default NotificationItem;

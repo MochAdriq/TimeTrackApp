@@ -1,5 +1,4 @@
 // src/features/Home/components/Header.js
-
 import React from 'react';
 import {
   View,
@@ -7,34 +6,46 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  Image, // <<< 1. IMPORT Image
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native'; // Hook untuk akses navigation
+import { useNavigation } from '@react-navigation/native';
 
-// Impor ikon jika pakai SVG atau library ikon
-// import NotificationIcon from '../../../assets/icons/NotificationIcon.svg';
-
-import ProfilePict from '../../../assets/images/ProfilePict.svg';
+// <<< 2. HAPUS IMPORT ProfilePict (SVG) >>>
+// import ProfilePict from '../../../assets/images/ProfilePict.svg';
 import BellIcon from '../../../assets/icon/BellIcon.svg';
+import { useNotification } from '../../../context/NotificationContext';
+// (Kita akan ambil avatar_url dari props, yang di-supply oleh HomeScreen)
 
-const Header = ({ userName, level, points, onNotificationPress, onLayout }) => {
-  const navigation = useNavigation(); // <<< Dapatkan navigation pakai hook
+// <<< 3. TAMBAHKAN 'avatarUrl' KE PROPS >>>
+const Header = ({
+  userName,
+  level,
+  points,
+  onNotificationPress,
+  onLayout,
+  avatarUrl,
+}) => {
+  const navigation = useNavigation();
+  const { unreadCount } = useNotification();
+
+  // <<< 4. TENTUKAN SUMBER GAMBAR >>>
+  // Pastikan Boss punya gambar fallback di path ini
+  const profileImageSource = avatarUrl
+    ? { uri: avatarUrl }
+    : require('../../../assets/images/dummyImage2.png');
 
   return (
-    // Container utama header, sekarang transparan/tanpa background spesifik
     <View style={styles.outerContainer} onLayout={onLayout}>
-      {/* View untuk background gelap melengkung */}
       <View style={styles.backgroundCurve}>
-        {/* Konten ditaruh di dalam lengkungan */}
         <View style={styles.contentContainer}>
-          {/* Profile Section */}
           <TouchableOpacity
-            style={styles.profileTouchable} // Style tambahan jika perlu
-            onPress={() => navigation.openDrawer()} // <<< Panggil openDrawer
+            style={styles.profileTouchable}
+            onPress={() => navigation.openDrawer()}
             activeOpacity={0.7}
           >
             <View style={styles.profileContainer}>
-              <ProfilePict style={styles.profilePict} width={80} height={80} />
-
+              {/* <<< 5. GANTI ProfilePict DENGAN Image >>> */}
+              <Image source={profileImageSource} style={styles.profilePict} />
               <View style={styles.userInfo}>
                 <Text style={styles.greeting}>Hi, {userName}</Text>
                 <Text style={styles.subGreeting}>Good Morning</Text>
@@ -44,7 +55,6 @@ const Header = ({ userName, level, points, onNotificationPress, onLayout }) => {
                     <Text style={styles.pointsText}>
                       {points.toLocaleString('id-ID')}
                     </Text>
-                    {/* Ganti View ini dengan ikon koin */}
                     <View style={styles.coinIconPlaceholder} />
                   </View>
                 </View>
@@ -52,13 +62,13 @@ const Header = ({ userName, level, points, onNotificationPress, onLayout }) => {
             </View>
           </TouchableOpacity>
 
-          {/* Notification Button */}
+          {/* --- Tombol Notifikasi (Tidak Berubah) --- */}
           <TouchableOpacity
             style={styles.notificationButton}
             onPress={onNotificationPress}
           >
-            {/* Ganti View ini dengan ikon notifikasi */}
             <BellIcon width={40} height={40} />
+            {unreadCount > 0 && <View style={styles.badgeContainer} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -69,12 +79,12 @@ const Header = ({ userName, level, points, onNotificationPress, onLayout }) => {
 const styles = StyleSheet.create({
   outerContainer: {},
   backgroundCurve: {
-    backgroundColor: '#6A453C', // Warna background gelap
+    backgroundColor: '#6A453C',
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    paddingTop: StatusBar.currentHeight + 15 || 30, // Padding atas (termasuk status bar)
+    paddingTop: StatusBar.currentHeight + 15 || 30,
     paddingHorizontal: 20,
-    paddingBottom: 70, // Padding bawah di dalam lengkungan (SESUAIKAN agar pas)
+    paddingBottom: 70,
   },
   contentContainer: {
     flexDirection: 'row',
@@ -87,9 +97,14 @@ const styles = StyleSheet.create({
     marginLeft: 1,
   },
   profilePict: {
-    borderRadius: 90,
+    // <<< 6. PERBAIKI STYLE UNTUK <Image> >>>
+    width: 80,
+    height: 80,
+    borderRadius: 40, // Setengah dari width/height agar bulat
     backgroundColor: '#FFF',
     marginRight: 15,
+    borderWidth: 2, // Opsional: border putih
+    borderColor: '#FFFFFF',
   },
   userInfo: {
     // Style text group
@@ -111,7 +126,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginTop: 5,
-    alignSelf: 'flex-start', // Agar width container pas dengan isinya
+    alignSelf: 'flex-start',
   },
   levelText: {
     color: '#FFFFFF',
@@ -126,7 +141,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    // Hapus marginLeft auto, layout diatur oleh levelContainer
   },
   pointsText: {
     color: '#4A2F2F',
@@ -145,10 +159,21 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 16.25,
     right: 10,
+    position: 'relative',
   },
   notificationIconPlaceholder: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
+    // Tidak terpakai lagi
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FF0000',
+    borderWidth: 2,
+    borderColor: '#D0AA7B',
   },
 });
 
