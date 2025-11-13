@@ -18,10 +18,6 @@ import DealCard from '../components/DealCard'; // Import kartu deal
 import { supabase } from '../../../services/supabaseClient';
 import InfoModal from '../../../components/common/InfoModal';
 
-// --- Hapus Data Dummy ---
-// const userPoints = 300;
-// const dailyDeals = [ ... ];
-
 const conversionRate = '1000 XY = 100rs'; // rs? rupiah? (Biarkan ini, sepertinya statis)
 const minRedeem = 3000;
 

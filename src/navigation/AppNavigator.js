@@ -38,9 +38,13 @@ import MyChatListScreen from '../features/Discussion/screens/MyChatListScreen';
 import CreateGroupScreen from '../features/Discussion/screens/CreateGroupScreen';
 import GroupInfoScreen from '../features/Discussion/screens/GroupInfoScreen';
 import SupportChatScreen from '../features/Support/screens/SupportChatScreen';
+import PaymentStatusScreen from '../features/Marketplace/screens/PaymentStatusScreen';
+import PremiumCheckoutScreen from '../features/Premium/screens/PremiumCheckoutScreen';
 
 // --- KEMBALIKAN IMPORT INI ---
 import { navigationRef } from './navigationRef';
+import PremiumTransferScreen from '../features/Premium/screens/PremiumTransferScreen';
+import MateriListScreen from '../features/Materi/screens/MateriListScreen';
 
 const RootStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
@@ -104,6 +108,7 @@ const AppNavigator = ({ session }) => {
             <RootStack.Screen name="MainApp" component={AppDrawer} />
             {/* ... (Semua layar Boss yang lain tetap di sini) ... */}
             <RootStack.Screen name="MateriDetail" component={MateriScreen} />
+            <RootStack.Screen name="MateriList" component={MateriListScreen} />
             <RootStack.Screen name="RedeemPoin" component={RedeemPoinScreen} />
             <RootStack.Screen
               name="EditProfile"
@@ -134,6 +139,10 @@ const AppNavigator = ({ session }) => {
               component={TransferDetailsScreen}
             />
             <RootStack.Screen
+              name="PaymentStatus"
+              component={PaymentStatusScreen}
+            />
+            <RootStack.Screen
               name="DiscussionChoice"
               component={DiscussionChoiceScreen}
             />
@@ -155,6 +164,14 @@ const AppNavigator = ({ session }) => {
             <RootStack.Screen
               name="SupportChat"
               component={SupportChatScreen}
+            />
+            <RootStack.Screen
+              name="PremiumCheckout"
+              component={PremiumCheckoutScreen}
+            />
+            <RootStack.Screen
+              name="PremiumTransfer"
+              component={PremiumTransferScreen}
             />
             <RootStack.Screen
               name="DeveloperScreen"

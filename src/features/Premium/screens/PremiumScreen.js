@@ -1,5 +1,4 @@
-// src/features/Premium/screens/PremiumScreen.js
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,16 +7,16 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
+  ActivityIndicator, // <<< 1. IMPORT
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native'; // <<< 2. IMPORT
+import { supabase } from '../../../services/supabaseClient'; // <<< 3. IMPORT
 
 // --- Impor Aset ---
-// Pastikan path ini benar
 import TimeTrackLogo from '../../../assets/images/TimeTrackLogo.svg';
 import TimeTrackName from '../../../assets/images/TimeTrackName.svg';
-// Impor ikon centang jika pakai SVG
-// import CheckmarkIcon from '../../../assets/icons/CheckmarkIcon.svg';
 
-// Data Fitur Premium
+// Data Fitur Premium (Tetap Hardcoded)
 const premiumFeatures = [
   'Akses semua Materi Video',
   'Fitur Favorite Materi',
@@ -27,14 +26,66 @@ const premiumFeatures = [
 ];
 
 const PremiumScreen = ({ navigation }) => {
+  // --- (INI PERUBAHANNYA) State Dinamis ---
+  const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState([]);
+  const [selectedPackageId, setSelectedPackageId] = useState(null);
+  // --- (BATAS PERUBAHAN) ---
+
+  // --- (INI FUNGSI BARU) Fetch data paket ---
+  const fetchPackages = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('premium_packages')
+        .select('*')
+        .order('price', { ascending: true }); // Urutkan dari termurah
+
+      if (error) throw error;
+      setPackages(data || []);
+    } catch (error) {
+      console.error('Error fetching premium packages:', error.message);
+      // Di sini kita bisa tampilkan modal error jika perlu
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Ambil data saat layar dibuka
+  useFocusEffect(
+    useCallback(() => {
+      // Panggil fungsi async dari dalam sini
+      fetchPackages();
+    }, [fetchPackages]), // <-- Pastikan fetchPackages ada di dependensi
+  );
+  // --- (BATAS FUNGSI BARU) ---
+
   const handleGetStarted = () => {
-    // --- TODO: Logika untuk memulai langganan ---
-    console.log('Get Started Premium');
+    // --- (INI PERUBAHANNYA) Logika navigasi ---
+    if (!selectedPackageId) {
+      alert('Silakan pilih salah satu paket terlebih dahulu.');
+      return;
+    }
+
+    const selectedPkg = packages.find(p => p.id === selectedPackageId);
+    if (selectedPkg) {
+      console.log('Navigasi ke PremiumCheckout dengan paket:', selectedPkg);
+      // Arahkan ke layar BERIKUTNYA (yang akan kita buat)
+      navigation.navigate('PremiumCheckout', { package: selectedPkg });
+    }
+    // --- (BATAS PERUBAHAN) ---
   };
 
-  const handleSelectPlan = planType => {
-    // --- TODO: Logika memilih plan ---
-    console.log('Selected plan:', planType);
+  const handleSelectPlan = pkgId => {
+    // --- (INI PERUBAHANNYA) Logika memilih plan ---
+    setSelectedPackageId(pkgId);
+    // --- (BATAS PERUBAHAN) ---
+  };
+
+  // Helper untuk format Rupiah
+  const formatCurrency = value => {
+    if (!value) return 'Gratis';
+    return `Rp ${value.toLocaleString('id-ID')}`;
   };
 
   return (
@@ -56,11 +107,9 @@ const PremiumScreen = ({ navigation }) => {
         <View style={styles.featuresContainer}>
           {premiumFeatures.map((feature, index) => (
             <View key={index} style={styles.featureItem}>
-              {/* Ganti View ini dengan ikon centang */}
               <View style={styles.checkmarkPlaceholder}>
                 <Text style={{ color: '#4CAF50' }}>✓</Text>
               </View>
-              {/* <CheckmarkIcon width={20} height={20} fill="#4CAF50" /> */}
               <Text style={styles.featureText}>{feature}</Text>
             </View>
           ))}
@@ -74,55 +123,68 @@ const PremiumScreen = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Pilihan Paket */}
-        <View style={styles.planOptionsContainer}>
-          {/* Paket Bulanan */}
-          <TouchableOpacity
-            style={styles.planCard}
-            onPress={() => handleSelectPlan('monthly')}
-          >
-            <Text style={styles.planType}>Premium Bulanan</Text>
-            <Text style={styles.planPrice}>Rp 25ribu/Bulan</Text>
-            <Text style={styles.planTrial}>7 hari percobaan</Text>
-          </TouchableOpacity>
-
-          {/* Paket Tahunan */}
-          <TouchableOpacity
-            style={styles.planCard}
-            onPress={() => handleSelectPlan('yearly')}
-          >
-            <Text style={styles.planType}>Premium Tahunan</Text>
-            <Text style={styles.planPrice}>Rp 250ribu/Tahun</Text>
-            {/* Kosongkan trial jika tidak ada */}
-            <Text style={styles.planTrial}> </Text>
-          </TouchableOpacity>
-        </View>
+        {/* --- (INI PERUBAHAN BESAR) Pilihan Paket Dinamis --- */}
+        {loading ? (
+          <ActivityIndicator
+            size="large"
+            color="#6A453C"
+            style={styles.loader}
+          />
+        ) : (
+          <View style={styles.planOptionsContainer}>
+            {packages.map(pkg => (
+              <TouchableOpacity
+                key={pkg.id}
+                style={[
+                  styles.planCard,
+                  selectedPackageId === pkg.id && styles.planCardSelected, // Style saat dipilih
+                ]}
+                onPress={() => handleSelectPlan(pkg.id)}
+              >
+                <Text style={styles.planType}>{pkg.title}</Text>
+                <Text style={styles.planPrice}>
+                  {formatCurrency(pkg.price)}
+                </Text>
+                <Text style={styles.planTrial}>
+                  {/* Tampilkan durasi (misal: "Selama 30 Hari") */}
+                  {pkg.duration_days
+                    ? `Selama ${pkg.duration_days} Hari`
+                    : 'Sekali Bayar'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {/* --- (BATAS PERUBAHAN) --- */}
 
         {/* Tombol Get Started */}
         <TouchableOpacity
-          style={styles.getStartedButton}
+          style={[
+            styles.getStartedButton,
+            (!selectedPackageId || loading) && styles.getStartedButtonDisabled, // Tombol disable
+          ]}
           onPress={handleGetStarted}
+          disabled={!selectedPackageId || loading}
         >
           <Text style={styles.getStartedButtonText}>Get Started</Text>
         </TouchableOpacity>
 
-        {/* Spacer agar tidak tertutup tab bar */}
         <View style={{ height: 90 }} />
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-// --- STYLES (Contoh, sesuaikan warna, font, spacing) ---
+// --- (INI PERUBAHAN STYLE) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Background putih
+    backgroundColor: '#FFFFFF',
   },
   scrollContainer: {
-    alignItems: 'center', // Pusatkan konten secara horizontal
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 30, // Jarak dari atas
+    paddingTop: 30,
   },
   logoContainer: {
     alignItems: 'center',
@@ -132,9 +194,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   featuresContainer: {
-    alignSelf: 'flex-start', // Ratakan list fitur ke kiri
+    alignSelf: 'flex-start',
     marginBottom: 30,
-    paddingLeft: '10%', // Beri indentasi
+    paddingLeft: '10%',
   },
   featureItem: {
     flexDirection: 'row',
@@ -142,18 +204,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   checkmarkPlaceholder: {
-    // Ganti dengan style ikon centang
     width: 24,
     height: 24,
     marginRight: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // checkmarkIcon: { marginRight: 10 },
   featureText: {
     fontSize: 16,
     color: '#333',
-    // fontFamily: 'YourFont-Regular',
   },
   getPremiumSection: {
     alignItems: 'center',
@@ -164,62 +223,75 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
-    // fontFamily: 'YourFont-Bold',
   },
   premiumSubtitle: {
     fontSize: 14,
     color: '#777',
-    // fontFamily: 'YourFont-Regular',
+  },
+  loader: {
+    height: 120, // Beri tinggi agar layout tidak "lompat"
+    justifyContent: 'center',
   },
   planOptionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between', // Kasih jarak antar kartu
-    width: '100%', // Lebar penuh
+    justifyContent: 'space-between',
+    width: '100%',
     marginBottom: 30,
   },
   planCard: {
-    backgroundColor: '#FAF3E0', // Warna krem/beige (estimasi)
+    backgroundColor: '#FAF3E0',
     borderRadius: 15,
     padding: 15,
-    width: '48%', // Sekitar setengah lebar (dikurangi jarak)
-    alignItems: 'center', // Teks di tengah
-    // Shadow (optional)
+    width: '48%',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
+    borderWidth: 2, // Tambahkan border
+    borderColor: '#FAF3E0', // Border transparan by default
+  },
+  // --- (STYLE BARU UNTUK KARTU AKTIF) ---
+  planCardSelected: {
+    borderColor: '#6A453C', // Border coklat saat dipilih
+    backgroundColor: '#FFFFFF', // Ubah background saat dipilih
   },
   planType: {
     fontSize: 13,
-    color: '#B0A08D', // Warna abu kecoklatan (estimasi)
+    color: '#B0A08D',
     fontWeight: 'bold',
     marginBottom: 8,
   },
   planPrice: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#6A453C', // Warna coklat tua (estimasi)
+    color: '#6A453C',
     marginBottom: 4,
   },
   planTrial: {
     fontSize: 11,
-    color: '#AAA', // Warna abu-abu
+    color: '#AAA',
+    height: 15, // Beri tinggi agar card sejajar
   },
   getStartedButton: {
-    backgroundColor: '#E3D5B8', // Warna krem tombol (estimasi)
+    backgroundColor: '#E3D5B8',
     paddingVertical: 16,
     paddingHorizontal: 60,
-    borderRadius: 30, // Sangat melengkung
-    // Shadow (optional)
+    borderRadius: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
+  // --- (STYLE BARU UNTUK TOMBOL DISABLE) ---
+  getStartedButtonDisabled: {
+    backgroundColor: '#E0E0E0',
+    elevation: 0,
+  },
   getStartedButtonText: {
-    color: '#6A453C', // Warna teks coklat tua
+    color: '#6A453C',
     fontSize: 16,
     fontWeight: 'bold',
   },

@@ -1,5 +1,4 @@
-// src/features/Marketplace/screens/CheckoutScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,212 +11,176 @@ import {
   TextInput,
   Alert,
   Platform,
-  ActivityIndicator, // <<< 1. Import
+  ActivityIndicator,
+  Switch, // <<< 1. Import Switch
 } from 'react-native';
 
-import { supabase } from '../../../services/supabaseClient'; // <<< 2. Import
-import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
+import { useProfile } from '../../../context/ProfileContext'; // <<< 2. Import useProfile
 
 const placeholderImage = require('../../../../src/assets/images/dummyImage.png');
 
-// --- Komponen kecil InfoCardRow (Tetap sama) ---
-const InfoCardRow = ({ title, value, valueStyle, onPress }) => (
-  <TouchableOpacity
-    style={[styles.card, styles.row, !onPress && styles.disabledCard]}
-    onPress={onPress}
-    disabled={!onPress}
-  >
+// --- (FungSI BARU) Helper untuk format Rupiah ---
+const formatCurrency = value => `Rp ${value.toLocaleString('id-ID')}`;
+
+// --- (KOMPONEN DIREVISI) InfoCardRow ---
+// (Dihapus 'onPress' dari Alamat, karena kita pakai TextInput)
+const InfoCardRow = ({ title, value, valueStyle }) => (
+  <View style={[styles.card, styles.row]}>
     <Text style={styles.cardTitle}>{title}</Text>
     <View style={styles.rowEndContainer}>
       <Text style={[styles.valueText, valueStyle]} numberOfLines={3}>
         {value}
       </Text>
-      {onPress && <Text style={styles.arrowText}> {'>'}</Text>}
     </View>
-  </TouchableOpacity>
+  </View>
 );
 
-// --- Opsi Pembayaran (Masih hardcode, tidak apa-apa) ---
-const PAYMENT_OPTIONS = [
-  {
-    key: 'bca',
-    name: 'Transfer Bank BCA',
-    account: '1234567890 (a/n Toko Keren)',
-  },
-  {
-    key: 'mandiri',
-    name: 'Transfer Bank Mandiri',
-    account: '0987654321 (a/n Toko Keren)',
-  },
-];
+// --- HAPUS: PAYMENT_OPTIONS (Kita ambil dari DB) ---
+// (Kita akan ambil 1 pembayaran default dari TransferDetailsScreen.js)
+const DEFAULT_PAYMENT = {
+  name: 'Transfer Bank (Admin)',
+  account: 'Akan diinfokan di halaman selanjutnya',
+};
 
 const CheckoutScreen = ({ route, navigation }) => {
-  // --- 4. Ambil data WAJIB dari route.params ---
-  const { product, quantity, variant } = route.params || {};
+  // --- 4. Ambil data 'cartItems' (BUKAN 'product') ---
+  const { cartItems } = route.params || {};
 
   // --- 5. State baru ---
-  const [profile, setProfile] = useState(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  // Ambil profil dari Context
+  const { profile, loading: loadingProfile, fetchProfile } = useProfile();
+
   const [placingOrder, setPlacingOrder] = useState(false);
   const [message, setMessage] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState(null);
+
+  // (PERBAIKAN) Set alamat & pembayaran
+  const [shippingAddress, setShippingAddress] = useState(
+    profile?.address || '',
+  ); // State untuk alamat
+  const [selectedPayment, setSelectedPayment] = useState(DEFAULT_PAYMENT);
+
+  // (STATE BARU) Untuk Diskon Poin
+  const [usePoints, setUsePoints] = useState(false);
 
   // --- Modal Error State ---
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
-  // --- Alamat & Pengiriman (Masih Hardcode) ---
-  const shippingCost = 0; // TODO: Integrasi API ongkir
-  const userAddress =
-    'National Rte 3 No.116, Sukamanah, Cisaat, Sukabumi City, West Java 43115'; // TODO: Ambil dari profil
+  // --- HAPUS: shippingCost & userAddress (Hardcoded) ---
 
-  // --- 6. Fungsi Fetch Profile ---
+  // --- 6. Fungsi Fetch Profile (MODIFIKASI: Ambil 'points') ---
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setLoadingProfile(true);
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-        if (authError) throw authError;
-        if (!user) {
-          showError('Error', 'User tidak ditemukan.');
-          return;
-        }
+    // Kita panggil fetchProfile dari context
+    // Pastikan ProfileContext.js mengambil 'points'
+    if (!profile) {
+      fetchProfile();
+    }
+  }, [profile, fetchProfile]);
 
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('full_name, mobile_no')
-          .eq('id', user.id)
-          .single();
-
-        if (error) throw error;
-        setProfile(data);
-      } catch (error) {
-        showError('Gagal Memuat Profil', error.message);
-      } finally {
-        setLoadingProfile(false);
-      }
-    };
-
-    fetchProfile();
-  }, []);
-
-  // --- 7. Fungsi showError ---
+  // --- 7. Fungsi showError (Tetap sama) ---
   const showError = (title, message) => {
     setModalTitle(title);
     setModalMessage(message);
     setModalVisible(true);
   };
 
-  // --- Handle Aksi (Pilih Bayar, Alamat, dll) ---
-  const handleSelectPayment = () => {
-    // Tampilkan pilihan dalam Alert Action Sheet (Logika ini oke)
-    Alert.alert(
-      'Pilih Metode Pembayaran',
-      '',
-      PAYMENT_OPTIONS.map(opt => ({
-        text: opt.name,
-        onPress: () => setSelectedPayment(opt),
-      })).concat([{ text: 'Batal', style: 'cancel' }]),
-      { cancelable: true },
-    );
-  };
+  // --- HAPUS: handleSelectPayment, handleEditAddress, handleSelectShipping ---
 
-  const handleEditAddress = () => {
-    showError('Fitur Belum Ada', 'Fitur ganti alamat akan segera hadir.');
-  };
+  // --- 8. Hitung Total (LOGIKA BARU) ---
+  const { totalOrder, totalQuantity } = useMemo(() => {
+    if (!cartItems) return { totalOrder: 0, totalQuantity: 0 };
+    let total = 0;
+    let qty = 0;
+    cartItems.forEach(item => {
+      total += (item.price || 0) * (item.quantity || 1);
+      qty += item.quantity || 1;
+    });
+    return { totalOrder: total, totalQuantity: qty };
+  }, [cartItems]);
 
-  const handleSelectShipping = () => {
-    showError(
-      'Fitur Belum Ada',
-      'Fitur ganti opsi pengiriman akan segera hadir.',
-    );
-  };
+  const userPoints = profile?.points || 0;
+  const pointsConversionRate = 1; // ASUMSI: 1 Poin = Rp 1
+  const maxDiscount = Math.min(userPoints / pointsConversionRate, totalOrder);
 
-  // --- 8. Fungsi Buat Pesanan (LOGIKA UTAMA) ---
+  const discountAmount = usePoints ? maxDiscount : 0;
+  const pointsUsed = usePoints ? maxDiscount * pointsConversionRate : 0;
+  const totalPayment = totalOrder - discountAmount; // Hapus shippingCost
+  // --- (BATAS LOGIKA BARU) ---
+
+  // --- 9. Fungsi Buat Pesanan (LOGIKA UTAMA DIMODIFIKASI) ---
   const handlePlaceOrder = async () => {
     if (!selectedPayment) {
+      showError('Perhatian', 'Metode pembayaran tidak valid.');
+      return;
+    }
+
+    // (PERBAIKAN) Validasi Alamat
+    if (!shippingAddress || shippingAddress.trim().length < 10) {
       showError(
         'Perhatian',
-        'Silakan pilih metode pembayaran terlebih dahulu.',
+        'Silakan isi alamat pengiriman yang lengkap (minimal 10 karakter).',
       );
       return;
     }
 
-    if (!profile || !product) {
+    if (!profile || !cartItems || cartItems.length === 0) {
       showError('Error', 'Data user atau produk tidak lengkap.');
       return;
     }
 
     setPlacingOrder(true);
     try {
-      // 1. Dapatkan User ID
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       // 2. Kumpulkan data untuk tabel 'orders'
-      const totalAmount = (product.price || 0) * quantity + shippingCost;
       const orderToInsert = {
         user_id: user.id,
-        total_amount: totalAmount,
+        total_amount: totalPayment,
         status: 'pending_payment',
-        shipping_address: userAddress, // TODO: Ganti dengan alamat asli
-        shipping_cost: shippingCost,
-        admin_fee: 0, // TODO: Tambah logika admin fee
+        shipping_address: shippingAddress.trim(), // <-- Alamat dari state
+        shipping_cost: 0, // <-- Dihapus
+        admin_fee: 0,
         payment_method_name: selectedPayment.name,
         payment_account_info: selectedPayment.account,
         user_message: message,
+        points_used: pointsUsed, // <-- (FITUR BARU) Simpan poin
       };
 
-      // 3. Insert ke tabel 'orders' dan ambil ID order baru
+      // 3. Insert ke tabel 'orders'
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert(orderToInsert)
-        .select('id, total_amount') // Ambil ID & total
-        .single(); // Kita tahu ini hanya 1
+        .select('id, total_amount')
+        .single();
 
-      if (orderError) {
-        throw orderError;
-      }
+      if (orderError) throw orderError;
 
-      // 4. Kumpulkan data untuk tabel 'order_items'
-      const itemToInsert = {
+      // 4. Kumpulkan data untuk tabel 'order_items' (Looping)
+      const itemsToInsert = cartItems.map(item => ({
         order_id: newOrder.id,
-        product_id: product.id,
-        quantity: quantity,
-        price_per_item: product.price,
-        variant_info: { selected: variant }, // Simpan varian sebagai JSON
-      };
+        product_id: item.id,
+        quantity: item.quantity,
+        price_per_item: item.price,
+        variant_info: { selected: item.selectedVariant || null },
+      }));
 
       // 5. Insert ke tabel 'order_items'
       const { error: itemError } = await supabase
         .from('order_items')
-        .insert(itemToInsert);
+        .insert(itemsToInsert);
 
-      if (itemError) {
-        // Jika item gagal masuk, idealnya order utama di-rollback/dihapus
-        throw itemError;
-      }
+      if (itemError) throw itemError;
 
       // 6. SUKSES! Siapkan data untuk layar berikutnya
-      const orderDetails = {
+      // (PERBAIKAN: Kirim 'orderId' saja, sesuai logika baru kita)
+      navigation.replace('TransferDetails', {
         orderId: newOrder.id,
-        productName: product.name,
-        variant: variant,
-        quantity: quantity,
-        shipping: shippingCost,
-        address: userAddress,
-        message: message,
-        total: newOrder.total_amount, // Ambil total pasti dari database
-        paymentMethod: selectedPayment,
-      };
-
-      // 7. Navigasi ke Detail Transfer
-      navigation.replace('TransferDetails', { orderDetails }); // Pakai replace agar tidak bisa kembali
+      });
     } catch (error) {
       showError('Gagal Membuat Pesanan', error.message);
     } finally {
@@ -225,7 +188,7 @@ const CheckoutScreen = ({ route, navigation }) => {
     }
   };
 
-  // --- 9. Validasi Data Awal ---
+  // --- 10. Validasi Data Awal ---
   if (loadingProfile) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -248,7 +211,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   }
 
   // Jika produk tidak ada (error navigasi)
-  if (!product) {
+  if (!cartItems || cartItems.length === 0) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
@@ -264,20 +227,11 @@ const CheckoutScreen = ({ route, navigation }) => {
           isVisible={true}
           onClose={() => navigation.goBack()}
           title="Error"
-          message="Data produk tidak ditemukan."
+          message="Keranjang Anda kosong."
         />
       </SafeAreaView>
     );
   }
-
-  // --- 10. Persiapan data render (gunakan nama field yg benar) ---
-  const qty = quantity || 1;
-  const selectedVariant = variant || 'N/A';
-  const totalOrder = (product.price || 0) * qty;
-  const totalPayment = totalOrder + shippingCost;
-  const imageSource = product.image_url
-    ? { uri: product.image_url }
-    : placeholderImage;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -291,7 +245,6 @@ const CheckoutScreen = ({ route, navigation }) => {
           <Text style={styles.headerBackText}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
-        {/* Kosongkan agar judul di tengah */}
         <View style={styles.headerButton} />
       </View>
 
@@ -300,61 +253,61 @@ const CheckoutScreen = ({ route, navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Kartu Penerima (BARU) */}
+        {/* Kartu Penerima (Data dari Profil) */}
         <InfoCardRow
           title="Penerima"
           value={`${profile?.full_name || '...'} (${
             profile?.mobile_no || '...'
           })`}
           valueStyle={styles.addressText}
-          onPress={handleEditAddress}
         />
 
-        {/* Kartu Alamat */}
-        <InfoCardRow
-          title="Alamat"
-          value={userAddress}
-          valueStyle={styles.addressText}
-          onPress={handleEditAddress}
-        />
-
-        {/* Kartu Produk */}
-        <View style={[styles.card, styles.productCard]}>
-          <Image source={imageSource} style={styles.thumbnail} />
-          <View style={styles.productInfo}>
-            <Text style={styles.productTitle} numberOfLines={2}>
-              {product.name}
-            </Text>
-            {selectedVariant !== 'N/A' && (
-              <Text style={styles.productVariant}>
-                Variasi: {selectedVariant}
-              </Text>
-            )}
-            <Text style={styles.productPrice}>
-              Rp{product.price.toLocaleString('id-ID')}
-            </Text>
-            {qty > 1 && (
-              <Text style={styles.productQuantity}>Jumlah: {qty}</Text>
-            )}
-          </View>
+        {/* (INI PERBAIKAN) Kartu Alamat (Jadi TextInput) */}
+        <View style={[styles.card, styles.addressCard]}>
+          <Text style={styles.cardTitle}>Alamat Pengiriman</Text>
+          <TextInput
+            placeholder="Masukkan alamat lengkap (Jalan, No. Rumah, Kecamatan, Kota/Kab, Kode Pos)"
+            style={styles.addressInput}
+            placeholderTextColor="#AAA"
+            value={shippingAddress}
+            onChangeText={setShippingAddress}
+            multiline
+          />
         </View>
+        {/* (BATAS PERBAIKAN) */}
 
-        {/* Kartu Opsi Pengiriman */}
-        <TouchableOpacity style={styles.card} onPress={handleSelectShipping}>
-          <View style={styles.row}>
-            <Text style={styles.cardTitle}>Opsi Pengiriman</Text>
-            <View style={styles.rowEndContainer}>
-              <Text style={styles.shippingPrice}>
-                Rp{shippingCost.toLocaleString('id-ID')}
-              </Text>
-              <Text style={styles.arrowText}> {'>'}</Text>
+        {/* (INI PERBAIKAN) Kartu Produk (Looping) */}
+        {cartItems.map((item, index) => {
+          const imageSource = item.image_url
+            ? { uri: item.image_url }
+            : placeholderImage;
+          return (
+            <View key={index} style={[styles.card, styles.productCard]}>
+              <Image source={imageSource} style={styles.thumbnail} />
+              <View style={styles.productInfo}>
+                <Text style={styles.productTitle} numberOfLines={2}>
+                  {item.name}
+                </Text>
+                {item.selectedVariant && (
+                  <Text style={styles.productVariant}>
+                    Variasi: {item.selectedVariant}
+                  </Text>
+                )}
+                <Text style={styles.productPrice}>
+                  {formatCurrency(item.price)}
+                </Text>
+                {item.quantity > 1 && (
+                  <Text style={styles.productQuantity}>
+                    Jumlah: {item.quantity}
+                  </Text>
+                )}
+              </View>
             </View>
-          </View>
-          <View style={styles.shippingDetailsContainer}>
-            <Text style={styles.textRegular}>Reguler</Text>
-            <Text style={styles.textSmall}>Jasa Kirim Toko</Text>
-          </View>
-        </TouchableOpacity>
+          );
+        })}
+        {/* (BATAS PERBAIKAN) */}
+
+        {/* --- HAPUS: Kartu Opsi Pengiriman --- */}
 
         {/* Kartu Pesan */}
         <View style={[styles.card, styles.row]}>
@@ -368,23 +321,54 @@ const CheckoutScreen = ({ route, navigation }) => {
           />
         </View>
 
-        {/* Kartu Total Pesanan */}
-        <InfoCardRow
-          title={`Total Pesanan (${qty} Produk):`}
-          value={`Rp.${totalOrder.toLocaleString('id-ID')}`}
-          valueStyle={styles.totalOrderPrice}
-        />
+        {/* (INI FITUR BARU) Kartu Diskon Poin */}
+        <View style={[styles.card, styles.row]}>
+          <View>
+            <Text style={styles.cardTitle}>Gunakan Poin</Text>
+            <Text style={styles.pointsAvailable}>
+              Boss punya {userPoints.toLocaleString('id-ID')} Poin
+            </Text>
+          </View>
+          <Switch
+            trackColor={{ false: '#767577', true: '#C8A870' }}
+            thumbColor={usePoints ? '#6A453C' : '#f4f3f4'}
+            onValueChange={setUsePoints}
+            value={usePoints}
+            disabled={userPoints === 0}
+          />
+        </View>
+        {/* (BATAS FITUR BARU) */}
 
-        {/* Kartu Metode Pembayaran */}
+        {/* Ringkasan Pembayaran */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Ringkasan Pembayaran</Text>
+          <View style={styles.itemRow}>
+            <Text style={styles.itemLabel}>
+              Total Pesanan ({totalQuantity} Produk)
+            </Text>
+            <Text style={styles.itemValue}>{formatCurrency(totalOrder)}</Text>
+          </View>
+          {/* (PERBAIKAN) Hapus 'shippingCost' */}
+          <View style={styles.itemRow}>
+            <Text style={styles.itemLabel}>Diskon Poin</Text>
+            <Text style={[styles.itemValue, styles.discountText]}>
+              - {formatCurrency(discountAmount)}
+            </Text>
+          </View>
+          <View style={styles.separator} />
+          <View style={styles.itemRow}>
+            <Text style={styles.totalLabel}>Total Pembayaran</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrency(totalPayment)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Kartu Metode Pembayaran (Sederhana) */}
         <InfoCardRow
           title="Metode Pembayaran"
-          value={selectedPayment ? selectedPayment.name : 'Pilih'}
-          valueStyle={
-            selectedPayment
-              ? styles.paymentMethodSelectedText
-              : styles.paymentMethodText
-          }
-          onPress={handleSelectPayment}
+          value={selectedPayment.name}
+          valueStyle={styles.paymentMethodSelectedText}
         />
       </ScrollView>
 
@@ -392,14 +376,12 @@ const CheckoutScreen = ({ route, navigation }) => {
       <View style={styles.footer}>
         <View style={styles.footerTextContainer}>
           <Text style={styles.footerLabel}>Total Pembayaran</Text>
-          <Text style={styles.footerPrice}>
-            Rp.{totalPayment.toLocaleString('id-ID')}
-          </Text>
+          <Text style={styles.footerPrice}>{formatCurrency(totalPayment)}</Text>
         </View>
         <TouchableOpacity
           style={styles.orderButton}
           onPress={handlePlaceOrder}
-          disabled={placingOrder} // <<< Disable saat loading
+          disabled={placingOrder}
         >
           {placingOrder ? (
             <ActivityIndicator color="#6A453C" />
@@ -409,7 +391,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* --- Modal Error --- */}
+      {/* Modal Error */}
       <InfoModal
         isVisible={modalVisible}
         onClose={() => setModalVisible(false)}
@@ -420,6 +402,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   );
 };
 
+// --- (INI STYLE BARU) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8F8F8' },
   header: {
@@ -427,12 +410,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    paddingVertical: 12, // <<< Rapikan padding
+    paddingVertical: 12,
     backgroundColor: '#6A453C',
   },
   headerButton: {
     padding: 5,
-    minWidth: 40, // Beri lebar minimum agar seimbang
+    minWidth: 40,
     alignItems: 'center',
   },
   headerBackText: {
@@ -453,7 +436,7 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: {
     padding: 15,
-    paddingBottom: 100, // Beri ruang untuk footer
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -470,12 +453,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  disabledCard: {},
   rowEndContainer: {
-    flex: 1, // <<< Tambahkan
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end', // <<< Tambahkan
+    justifyContent: 'flex-end',
   },
   thumbnail: {
     width: 65,
@@ -494,23 +476,12 @@ const styles = StyleSheet.create({
   productVariant: { fontSize: 13, color: '#888', marginBottom: 4 },
   productPrice: { fontSize: 15, fontWeight: 'bold', color: '#333' },
   productQuantity: { fontSize: 13, color: '#888', marginTop: 4 },
-  shippingPrice: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  shippingDetailsContainer: {
-    marginTop: 8,
-    paddingLeft: 5,
-  },
   cardTitle: { fontSize: 15, fontWeight: '500', color: '#333' },
-  textRegular: { fontSize: 14, color: '#555' },
-  textSmall: { fontSize: 12, color: '#999', marginTop: 3 },
   valueText: {
     fontSize: 14,
     fontWeight: '500',
-    flexShrink: 1, // <<< Tambahkan
-    textAlign: 'right', // <<< Tambahkan
+    flexShrink: 1,
+    textAlign: 'right',
   },
   addressText: {
     flex: 1,
@@ -520,6 +491,54 @@ const styles = StyleSheet.create({
     color: '#555',
     lineHeight: 20,
   },
+  // (STYLE BARU) Alamat
+  addressCard: {
+    paddingVertical: 12, // Padding lebih kecil
+  },
+  addressInput: {
+    fontSize: 14,
+    color: '#333',
+    paddingTop: 10,
+    paddingBottom: 0,
+    textAlignVertical: 'top',
+    minHeight: 60, // Tinggi minimal
+  },
+  // (STYLE BARU) Poin
+  pointsAvailable: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  // (STYLE BARU) Ringkasan
+  itemLabel: {
+    fontSize: 15,
+    color: '#555',
+  },
+  itemValue: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '500',
+  },
+  discountText: {
+    color: '#2E7D32', // Hijau
+    fontWeight: 'bold',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 10,
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: 'bold',
+  },
+  totalValue: {
+    fontSize: 18,
+    color: '#6A453C',
+    fontWeight: 'bold',
+  },
+  // (BATAS STYLE BARU)
   messageInput: {
     flex: 1,
     textAlign: 'right',
@@ -528,22 +547,11 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     paddingVertical: 0,
   },
-  totalOrderPrice: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#D32F2F',
-  },
-  paymentMethodText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#999',
-  },
   paymentMethodSelectedText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#333',
   },
-  arrowText: { fontSize: 18, color: '#AAA', fontWeight: 'bold', marginLeft: 5 },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -578,9 +586,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 25,
     borderRadius: 25,
-    minWidth: 140, // <<< Tambahkan lebar minimum
-    alignItems: 'center', // <<< Tambahkan
-    justifyContent: 'center', // <<< Tambahkan
+    minWidth: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   orderButtonText: {
     color: '#6A453C',

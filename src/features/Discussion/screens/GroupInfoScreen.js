@@ -1,4 +1,3 @@
-// src/features/Discussion/screens/GroupInfoScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,6 +12,8 @@ import {
 import { supabase } from '../../../services/supabaseClient';
 import { launchImageLibrary } from 'react-native-image-picker';
 import InfoModal from '../../../components/common/InfoModal'; // <<< DITAMBAHKAN
+// --- (INI IMPORT YANG DIPERLUKAN) ---
+import { decode } from 'base64-arraybuffer';
 
 const GroupInfoScreen = ({ route, navigation }) => {
   const { chatId, chatName, chatAvatarUrl } = route.params;
@@ -54,15 +55,16 @@ const GroupInfoScreen = ({ route, navigation }) => {
     checkAdminStatus();
   }, [chatId]);
 
+  // --- (FUNGSI INI DIMODIFIKASI) ---
   const handleUpdateAvatar = async () => {
     setLoading(true);
 
-    // 1. Pilih Gambar (sama seperti EditProfileScreen)
+    // 1. Pilih Gambar
     const options = {
       mediaType: 'photo',
       maxWidth: 512,
       maxHeight: 512,
-      includeBase64: true,
+      includeBase64: true, // Kita butuh base64
     };
     const response = await new Promise(resolve =>
       launchImageLibrary(options, resolve),
@@ -85,13 +87,22 @@ const GroupInfoScreen = ({ route, navigation }) => {
     }
 
     try {
+      // --- (INI PERBAIKAN KODE) ---
+      // Ubah string Base64 menjadi ArrayBuffer (file)
+      // Ini adalah logika yang sama dengan di ProfileContext.js
+      const decodedData = decode(image.base64);
+      // --- (BATAS PERBAIKAN KODE) ---
+
       // 2. Upload Gambar BARU
       const fileName = `group_${chatId}_${Date.now()}.png`;
       const filePath = `${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('group_avatars')
-        .upload(filePath, image.base64, {
+        // --- (INI PERBAIKAN KODE) ---
+        // Kirim 'decodedData' (file) BUKAN 'image.base64' (string)
+        .upload(filePath, decodedData, {
+          // --- (BATAS PERBAIKAN KODE) ---
           contentType: image.type || 'image/png',
           upsert: false,
         });
@@ -120,7 +131,6 @@ const GroupInfoScreen = ({ route, navigation }) => {
             .remove([oldFileName]);
 
           if (removeError) {
-            // Jangan batalkan proses, cukup log error
             console.error('Gagal hapus file lama:', removeError.message);
           }
         }
@@ -128,7 +138,6 @@ const GroupInfoScreen = ({ route, navigation }) => {
 
       // 6. Update UI
       setCurrentAvatar(newAvatarUrl);
-      // (Opsional: Update juga state di navigator agar ChatScreen ikut berubah)
       navigation.setParams({ chatAvatarUrl: newAvatarUrl });
     } catch (error) {
       showError('Gagal Update Avatar', error.message);
@@ -136,6 +145,7 @@ const GroupInfoScreen = ({ route, navigation }) => {
       setLoading(false);
     }
   };
+  // --- (BATAS MODIFIKASI FUNGSI) ---
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -187,7 +197,7 @@ const GroupInfoScreen = ({ route, navigation }) => {
   );
 };
 
-// --- STYLESHEET LENGKAP ---
+// --- (STYLESHEET LENGKAP TETAP SAMA) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

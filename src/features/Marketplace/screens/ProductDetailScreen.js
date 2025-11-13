@@ -1,5 +1,4 @@
-// src/features/Marketplace/screens/ProductDetailScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'; // <<< IMPORT useCallback
 import {
   View,
   Text,
@@ -10,39 +9,33 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
-  ActivityIndicator, // <<< 1. Import
+  ActivityIndicator,
 } from 'react-native';
 
 // --- Impor Aset & Modal ---
-import { supabase } from '../../../services/supabaseClient'; // <<< 2. Import Supabase
-import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import Modal Error
-import CheckoutModal from '../components/CheckoutModal';
+import { supabase } from '../../../services/supabaseClient';
+import InfoModal from '../../../components/common/InfoModal';
+// --- HAPUS: CheckoutModal ---
 
 const placeholderImage = require('../../../../src/assets/images/dummyImage.png');
 const { width: screenWidth } = Dimensions.get('window');
 const imageHeight = screenWidth;
 
-// --- Hapus Data Dummy ---
-// const dummyProduct = { ... };
-
 const ProductDetailScreen = ({ route, navigation }) => {
-  // --- 4. Ambil data awal dari parameter navigasi ---
   const { productId, itemData: initialItemData } = route.params;
 
-  // --- 5. State untuk data lengkap, loading, dan error ---
-  const [item, setItem] = useState(initialItemData); // Tampilkan data awal dulu
-  const [loading, setLoading] = useState(true); // Set true untuk fetch detail
+  const [item, setItem] = useState(initialItemData);
+  const [loading, setLoading] = useState(true);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [activeTab, setActiveTab] = useState('Detail');
-  const [isCheckoutModalVisible, setCheckoutModalVisible] = useState(false);
+  // --- HAPUS: isCheckoutModalVisible ---
 
-  // --- Modal Error State ---
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
-  // --- 6. Fungsi untuk fetch data detail dari Supabase ---
-  const fetchProductDetail = async () => {
+  // --- (INI PERBAIKANNYA) Bungkus dengan useCallback ---
+  const fetchProductDetail = useCallback(async () => {
     if (!productId) {
       showError('Error', 'ID Produk tidak ditemukan.', true);
       return;
@@ -54,7 +47,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
         .from('products')
         .select('*')
         .eq('id', productId)
-        .single(); // Ambil satu data saja
+        .single();
 
       if (error) {
         throw error;
@@ -64,7 +57,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
         setItem(data);
         // Set varian default jika ada
         if (data.variants && data.variants.length > 0) {
-          // Cek tipe data variants, jika JSON, ambil key pertama
           if (
             typeof data.variants === 'object' &&
             !Array.isArray(data.variants)
@@ -80,7 +72,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
           }
         }
       } else {
-        // Produk tidak ditemukan
         showError('Error', 'Produk tidak ditemukan atau sudah dihapus.', true);
       }
     } catch (error) {
@@ -88,47 +79,69 @@ const ProductDetailScreen = ({ route, navigation }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [productId, showError]); // Tambahkan navigation jika showError menggunakannya
+  // --- (BATAS PERBAIKAN) ---
 
-  // --- 7. Panggil fetchProductDetail saat komponen dimuat ---
+  // --- (INI PERBAIKANNYA) Panggil fetchProductDetail ---
   useEffect(() => {
     fetchProductDetail();
-  }, [productId]);
+  }, [productId, fetchProductDetail]); // <-- Tambahkan fetchProductDetail
 
-  // --- 8. Fungsi untuk menampilkan modal error ---
-  const showError = (title, message, goBack = false) => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalVisible(true);
-    // Jika 'goBack' true, arahkan user kembali saat modal ditutup
-    if (goBack) {
-      setTimeout(() => {
-        setModalVisible(false);
-        navigation.goBack();
-      }, 2500); // Tampilkan error 2.5 detik lalu kembali
-    }
-  };
+  // --- (INI FUNGSI BARU) showError dipisah ---
+  const showError = useCallback(
+    (title, message, goBack = false) => {
+      setModalTitle(title);
+      setModalMessage(message);
+      setModalVisible(true);
+      if (goBack) {
+        setTimeout(() => {
+          setModalVisible(false);
+          navigation.goBack();
+        }, 2500);
+      }
+    },
+    [navigation],
+  ); // Tambahkan navigation
+  // --- (BATAS FUNGSI BARU) ---
 
-  // --- Fungsi Modal (tidak berubah) ---
-  const handleAddToCart = () => {
-    console.log('Add to Cart pressed');
-    setCheckoutModalVisible(true);
-  };
+  // --- HAPUS: handleAddToCart ---
 
+  // --- (INI PERUBAHAN UTAMA) ---
   const handleBuyNow = () => {
-    console.log('Buy Now pressed, opening modal...');
-    setCheckoutModalVisible(true);
-  };
+    console.log('Buy Now pressed, navigasi ke Checkout...');
 
-  const closeCheckoutModal = () => setCheckoutModalVisible(false);
+    // Validasi: Cek jika ada varian, tapi belum dipilih
+    if (item.variants && !selectedVariant) {
+      showError('Pilih Varian', 'Silakan pilih varian produk terlebih dahulu.');
+      return;
+    }
+
+    // Buat "keranjang palsu" (Array berisi 1 item)
+    // Ini agar CheckoutScreen.js (langkah B) bisa menerima data
+    // dalam format yang konsisten (array of items)
+    const cartItems = [
+      {
+        ...item,
+        selectedVariant: selectedVariant,
+        quantity: 1, // Asumsi beli 1
+      },
+    ];
+
+    // Navigasi langsung ke CheckoutScreen, kirim data produk
+    navigation.navigate('Checkout', {
+      cartItems: cartItems,
+    });
+  };
+  // --- (BATAS PERUBAHAN) ---
+
+  // --- HAPUS: closeCheckoutModal ---
   const handleSeeMore = () => console.log('See More Description');
 
-  // --- 9. Render Loading jika data belum siap ---
+  // --- (Tampilan Loading & Error tetap sama) ---
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-        {/* Header minimalis saat loading */}
         <View style={styles.headerPlaceholder}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -144,7 +157,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
     );
   }
 
-  // --- 10. Tampilkan "Produk tidak ditemukan" jika item null (setelah loading) ---
   if (!item) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -164,7 +176,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
           isVisible={modalVisible}
           onClose={() => {
             setModalVisible(false);
-            navigation.goBack(); // Kembali saat modal ditutup
+            navigation.goBack();
           }}
           title={modalTitle}
           message={modalMessage}
@@ -173,11 +185,9 @@ const ProductDetailScreen = ({ route, navigation }) => {
     );
   }
 
-  // --- 11. Render Varian dengan aman (dari data JSON) ---
+  // --- (renderVariants tetap sama) ---
   const renderVariants = () => {
     if (!item.variants) return null;
-
-    // Jika variants adalah OBJEK (JSONB)
     if (typeof item.variants === 'object' && !Array.isArray(item.variants)) {
       return Object.keys(item.variants).map(variantName => (
         <View key={variantName} style={styles.variantGroup}>
@@ -208,8 +218,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
         </View>
       ));
     }
-
-    // Jika variants adalah ARRAY (data lama)
     if (Array.isArray(item.variants)) {
       return (
         <View style={styles.variantContainer}>
@@ -235,9 +243,9 @@ const ProductDetailScreen = ({ route, navigation }) => {
         </View>
       );
     }
-
     return null;
   };
+  // --- (Batas renderVariants) ---
 
   const imageSource = item.image_url
     ? { uri: item.image_url }
@@ -290,19 +298,13 @@ const ProductDetailScreen = ({ route, navigation }) => {
             Rp{itemPrice.toLocaleString('id-ID')}
           </Text>
 
-          {/* Varian (Part 1, 2, 3) */}
+          {/* Varian */}
           {renderVariants()}
 
-          {/* Tombol Aksi (Keranjang & Beli) */}
+          {/* --- (INI PERBAIKAN TOMBOL) --- */}
+          {/* Tombol Aksi (Hanya Beli Sekarang) */}
           <View style={styles.actionButtonContainer}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cartButton]}
-              onPress={handleAddToCart}
-            >
-              <Text style={[styles.actionButtonText, styles.cartButtonText]}>
-                Keranjang
-              </Text>
-            </TouchableOpacity>
+            {/* Tombol Keranjang Dihapus Sesuai Permintaan */}
             <TouchableOpacity
               style={[styles.actionButton, styles.buyButton]}
               onPress={handleBuyNow}
@@ -312,6 +314,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
               </Text>
             </TouchableOpacity>
           </View>
+          {/* --- (BATAS PERBAIKAN TOMBOL) --- */}
 
           {/* Tab Detail / Info Penting */}
           <View style={styles.tabNavContainer}>
@@ -351,28 +354,14 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
           {/* Konten Tab (Deskripsi / Info) */}
           <View style={styles.tabContent}>
-            <Text
-              style={styles.descriptionText}
-              // numberOfLines={activeTab === 'Detail' ? 10 : undefined} // Hapus batasan baris sementara
-            >
+            <Text style={styles.descriptionText}>
               {activeTab === 'Detail' ? itemDescription : itemInfoPenting}
             </Text>
-            {/* {activeTab === 'Detail' && (
-              <TouchableOpacity onPress={handleSeeMore}>
-                <Text style={styles.seeMoreText}>Lihat Selengkapnya</Text>
-              </TouchableOpacity>
-            )} */}
           </View>
         </View>
       </ScrollView>
 
-      {/* --- Render Modal Checkout --- */}
-      <CheckoutModal
-        isVisible={isCheckoutModalVisible}
-        onClose={closeCheckoutModal}
-        itemData={item}
-        selectedVariant={selectedVariant} // Kirim varian terpilih
-      />
+      {/* --- HAPUS: Render Modal Checkout --- */}
 
       {/* --- Render Modal Error --- */}
       <InfoModal
@@ -385,9 +374,9 @@ const ProductDetailScreen = ({ route, navigation }) => {
   );
 };
 
+// --- (INI PERBAIKAN STYLE) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  // --- Style Header Loading ---
   headerPlaceholder: {
     paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 25,
     paddingHorizontal: 15,
@@ -402,14 +391,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backButtonTextLoading: { fontSize: 24, color: '#333', fontWeight: 'bold' },
-  // --- Style Loading ---
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
   },
-  // ---
   scrollView: { flex: 1, backgroundColor: '#F4F4F4' },
   scrollContent: { paddingBottom: 40 },
   imageContainer: {
@@ -447,7 +434,6 @@ const styles = StyleSheet.create({
   ratingContainer: { flexDirection: 'row', alignItems: 'center' },
   starPlaceholder: { marginRight: 4 },
   price: { fontSize: 28, fontWeight: 'bold', color: '#000', marginBottom: 20 },
-  // --- Style Varian Baru ---
   variantGroup: {
     marginBottom: 15,
   },
@@ -457,8 +443,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  variantContainer: { flexDirection: 'row', flexWrap: 'wrap' }, // Tambah flexWrap
-  // ---
+  variantContainer: { flexDirection: 'row', flexWrap: 'wrap' },
   variantButton: {
     backgroundColor: '#F5F5F5',
     borderWidth: 1,
@@ -467,7 +452,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 15,
     marginRight: 10,
-    marginBottom: 10, // Tambah margin bottom
+    marginBottom: 10,
   },
   variantButtonSelected: {
     backgroundColor: '#E3D5B8',
@@ -475,21 +460,20 @@ const styles = StyleSheet.create({
   },
   variantText: { fontSize: 13, color: '#555' },
   variantTextSelected: { color: '#6A453C', fontWeight: 'bold' },
-  actionButtonContainer: { flexDirection: 'row', marginBottom: 25, gap: 10 },
+
+  // --- (PERBAIKAN STYLE TOMBOL) ---
+  actionButtonContainer: {
+    flexDirection: 'row', // Tetap row
+    marginBottom: 25,
+    // Hapus 'gap'
+  },
   actionButton: {
-    flex: 1,
+    flex: 1, // 'flex: 1' akan membuat tombol 'Beli' jadi 100% width
     paddingVertical: 14,
     borderRadius: 15,
     alignItems: 'center',
   },
-  cartButton: {
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#E3D5B8',
-  },
-  cartButtonText: {
-    color: '#6A453C',
-  },
+  // HAPUS: cartButton & cartButtonText
   buyButton: {
     backgroundColor: '#C8A870',
   },
@@ -497,6 +481,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   actionButtonText: { fontSize: 15, fontWeight: 'bold' },
+  // --- (BATAS PERBAIKAN STYLE) ---
+
   tabNavContainer: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -521,9 +507,7 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: 'bold',
   },
-  tabContent: {
-    // Konten tab
-  },
+  tabContent: {},
   descriptionText: {
     fontSize: 14,
     color: '#555',

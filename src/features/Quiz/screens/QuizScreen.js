@@ -1,5 +1,5 @@
-// src/features/Quiz/screens/QuizScreen.js
-import React, { useState, useEffect } from 'react';
+// (Tambahkan 'Image' di import)
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,21 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Image, // <<< 1. TAMBAHKAN IMPORT INI
 } from 'react-native';
 
 import { supabase } from '../../../services/supabaseClient';
+
+// --- (Fungsi formatTime tetap sama) ---
+const formatTime = totalSeconds => {
+  if (totalSeconds === null || totalSeconds < 0) return '--:--';
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds
+    .toString()
+    .padStart(2, '0')}`;
+};
+// --- (BATAS FUNGSI) ---
 
 const QuizScreen = ({ route, navigation }) => {
   const { quizId, quizTitle } = route.params;
@@ -22,6 +34,8 @@ const QuizScreen = ({ route, navigation }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswerIndex, setSelectedAnswerIndex] = useState(null);
   const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const intervalRef = useRef(null);
 
   useEffect(() => {
     const fetchQuizQuestions = async () => {
@@ -39,9 +53,11 @@ const QuizScreen = ({ route, navigation }) => {
           .select(
             `
             title,
+            duration, 
             questions (
               id,
               question_text,
+              image_url, 
               order_index,
               options (
                 id,
@@ -62,6 +78,7 @@ const QuizScreen = ({ route, navigation }) => {
             .map(q => ({
               id: q.id,
               question: q.question_text,
+              image_url: q.image_url, // <<< 3. SIMPAN IMAGE_URL
               options: q.options.map(opt => opt.option_text),
               correctAnswerIndex: q.options.findIndex(
                 opt => opt.is_correct === true,
@@ -70,6 +87,7 @@ const QuizScreen = ({ route, navigation }) => {
 
           setQuizData({
             title: data.title,
+            duration: data.duration,
             questions: formattedQuestions,
           });
         } else {
@@ -88,6 +106,49 @@ const QuizScreen = ({ route, navigation }) => {
     fetchQuizQuestions();
   }, [quizId, navigation]);
 
+  // --- (useEffect Timer tetap sama) ---
+  useEffect(() => {
+    if (quizData && quizData.duration) {
+      const durationInMinutes = parseInt(quizData.duration, 10);
+      if (!isNaN(durationInMinutes) && durationInMinutes > 0) {
+        const totalSeconds = durationInMinutes * 60;
+        setTimeLeft(totalSeconds);
+        intervalRef.current = setInterval(() => {
+          setTimeLeft(prevTime => {
+            if (prevTime <= 1) {
+              clearInterval(intervalRef.current);
+              Alert.alert(
+                'Waktu Habis!',
+                'Kuis akan disubmit secara otomatis.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      navigation.replace('QuizCongrats', {
+                        quizId: quizId,
+                        score: score,
+                        totalQuestions: quizData.questions.length,
+                      });
+                    },
+                  },
+                ],
+              );
+              return 0;
+            }
+            return prevTime - 1;
+          });
+        }, 1000);
+      }
+    }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [quizData, navigation, quizId, score]);
+  // --- (BATAS LOGIKA TIMER) ---
+
+  // --- (Semua handler tetap sama) ---
   const handleAnswerSelect = index => {
     setSelectedAnswerIndex(index);
   };
@@ -97,19 +158,18 @@ const QuizScreen = ({ route, navigation }) => {
       Alert.alert('Pilih Jawaban', 'Boss harus pilih jawaban dulu!');
       return;
     }
-
     const currentQuestion = quizData.questions[currentQuestionIndex];
     let currentScore = score;
-
     if (selectedAnswerIndex === currentQuestion.correctAnswerIndex) {
       currentScore = score + 1;
       setScore(currentScore);
     }
-
     const isLastQuestion =
       currentQuestionIndex === quizData.questions.length - 1;
-
     if (isLastQuestion) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
       navigation.replace('QuizCongrats', {
         quizId: quizId,
         score: currentScore,
@@ -128,8 +188,9 @@ const QuizScreen = ({ route, navigation }) => {
       Alert.alert('Info', 'Selesaikan semua soal untuk melihat hasil.');
     }
   };
+  // --- (Batas Handler) ---
 
-  // --- Tampilan Loading Awal (Saat `quizData` masih null) ---
+  // --- (Tampilan Loading & Kuis Kosong tetap sama) ---
   if (loading || !quizData) {
     return (
       <SafeAreaView style={styles.safeAreaLoading}>
@@ -151,8 +212,6 @@ const QuizScreen = ({ route, navigation }) => {
       </SafeAreaView>
     );
   }
-
-  // --- TAMBAHAN: Tampilan Jika Kuis Kosong (Soal tidak ada) ---
   if (!quizData.questions || quizData.questions.length === 0) {
     return (
       <SafeAreaView style={styles.safeAreaLoading}>
@@ -177,8 +236,8 @@ const QuizScreen = ({ route, navigation }) => {
       </SafeAreaView>
     );
   }
+  // --- (Batas Tampilan Loading) ---
 
-  // --- Jika aman, baru ambil currentQuestion ---
   const currentQuestion = quizData.questions[currentQuestionIndex];
 
   return (
@@ -194,14 +253,30 @@ const QuizScreen = ({ route, navigation }) => {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {quizData.title}
         </Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.timerContainer}>
+          <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+        </View>
       </View>
+
+      {/* --- (INI PERBAIKANNYA: Pindahkan ScrollView) --- */}
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.card}>
           <Text style={styles.questionNumber}>
             Pertanyaan {currentQuestionIndex + 1}/{quizData.questions.length}
           </Text>
+
+          {/* --- (INI FITUR BARU) Tampilkan Gambar --- */}
+          {currentQuestion.image_url && (
+            <Image
+              source={{ uri: currentQuestion.image_url }}
+              style={styles.questionImage}
+              resizeMode="cover"
+            />
+          )}
+          {/* --- (BATAS FITUR BARU) --- */}
+
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
+
           <View style={styles.optionsContainer}>
             {currentQuestion.options.map((option, index) => (
               <TouchableOpacity
@@ -246,7 +321,7 @@ const QuizScreen = ({ route, navigation }) => {
   );
 };
 
-// --- STYLES (Tetap sama) ---
+// --- (STYLES DIMODIFIKASI) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -254,7 +329,7 @@ const styles = StyleSheet.create({
   },
   safeAreaLoading: {
     flex: 1,
-    backgroundColor: '#F4EEE0', // Samakan background loading
+    backgroundColor: '#F4EEE0',
   },
   loadingContainer: {
     flex: 1,
@@ -265,25 +340,33 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', // Agar judul bisa di tengah
+    justifyContent: 'space-between',
     paddingHorizontal: 15,
     paddingVertical: 12,
     backgroundColor: '#6A453C',
   },
-  backButton: { padding: 5, width: 40 }, // Beri lebar agar judul pas di tengah
+  backButton: { padding: 5, width: 40 },
   backButtonText: { fontSize: 24, color: '#FFFFFF', fontWeight: 'bold' },
   headerTitle: {
-    // Style untuk judul di header
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    flex: 1, // Agar bisa memanjang
-    textAlign: 'center', // Tengah
+    flex: 1,
+    textAlign: 'center',
     marginHorizontal: 10,
+  },
+  timerContainer: {
+    width: 60,
+    alignItems: 'flex-end',
+  },
+  timerText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'center', // Tetap center (untuk soal pendek)
     alignItems: 'center',
     padding: 20,
   },
@@ -299,18 +382,26 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   questionNumber: {
-    // Style nomor soal
     fontSize: 14,
     color: '#AAA',
     marginBottom: 10,
     textAlign: 'center',
   },
+  // --- (STYLE BARU) ---
+  questionImage: {
+    width: '100%',
+    height: 180, // Tentukan tinggi gambar
+    borderRadius: 15,
+    marginBottom: 20, // Jarak ke teks soal
+    backgroundColor: '#F0F0F0',
+  },
+  // --- (BATAS STYLE BARU) ---
   questionText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 30,
-    textAlign: 'center', // Pusatkan soal
+    textAlign: 'center',
   },
   optionsContainer: {
     marginBottom: 20,
@@ -332,7 +423,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    textAlign: 'center', // Pusatkan teks opsi
+    textAlign: 'center',
   },
   optionTextDefault: {
     color: '#555',

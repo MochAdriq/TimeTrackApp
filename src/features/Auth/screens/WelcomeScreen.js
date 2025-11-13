@@ -1,5 +1,3 @@
-// src/features/Auth/screens/WelcomeScreen.js
-
 import React from 'react';
 import {
   View,
@@ -52,6 +50,10 @@ const WelcomeScreen = ({ navigation }) => {
             <Text style={styles.buttonText}>Sign in</Text>
           </TouchableOpacity>
         </View>
+
+        {/* --- INI PENAMBAHANNYA --- */}
+        <Text style={styles.versionText}>Versi 1.0.1</Text>
+        {/* --- BATAS PENAMBAHAN --- */}
       </View>
     </SafeAreaView>
   );
@@ -101,6 +103,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  // --- INI STYLE TAMBAHANNYA ---
+  versionText: {
+    position: 'absolute',
+    bottom: 20, // Di bawah container tombol
+    fontSize: 12,
+    color: '#6D4C41', // Samakan dengan warna TimeTrackName
+    opacity: 0.8,
+  },
+  // --- BATAS STYLE TAMBAHAN ---
 });
 
 export default WelcomeScreen;

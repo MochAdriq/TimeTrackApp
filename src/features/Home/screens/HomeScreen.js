@@ -1,4 +1,3 @@
-// src/features/Home/screens/HomeScreen.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
@@ -20,7 +19,6 @@ import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentMo
 
 import { supabase } from '../../../services/supabaseClient';
 import { useNotification } from '../../../context/NotificationContext';
-// <<< 1. IMPORT HANYA 'fetchProfile' DARI useProfile >>>
 import { useProfile } from '../../../context/ProfileContext';
 
 // --- (Fungsi formatMateriData dan filterMateri tetap sama) ---
@@ -39,14 +37,11 @@ const filterMateri = (data, query) => {
 // --- (Batas Fungsi) ---
 
 const HomeScreen = ({ navigation }) => {
-  // <<< 2. AMBIL HANYA FUNGSI 'fetchProfile' DARI CONTEXT >>>
-  const { fetchProfile } = useProfile(); // <<< 3. HAPUS SEMUA STATE LOKAL PROFIL >>>
-
-  const [userId, setUserId] = useState(null); // (Biarkan ini untuk fetch favorites) // --- (State lain tetap sama) ---
-
+  const { fetchProfile } = useProfile();
+  const [userId, setUserId] = useState(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [isModalVisible, setModalVisible] = useState(false);
-  const [loading, setLoading] = useState(true); // Ini untuk loading materi
+  const [loading, setLoading] = useState(true);
   const [materiPopuler, setMateriPopuler] = useState([]);
   const [materiBudaya, setMateriBudaya] = useState([]);
   const [materiTokoh, setMateriTokoh] = useState([]);
@@ -54,8 +49,7 @@ const HomeScreen = ({ navigation }) => {
   const [favoriteIds, setFavoriteIds] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-
-  const { fetchUnreadCount } = useNotification(); // <<< 4. fetchData (TETAP SAMA, SUDAH BERSIH DARI PROFIL) >>>
+  const { fetchUnreadCount } = useNotification();
 
   const fetchData = useCallback(
     async (isRefresh = false) => {
@@ -136,19 +130,19 @@ const HomeScreen = ({ navigation }) => {
         setRefreshing(false);
       }
     },
-    [userId], // Dependensi tetap, untuk favorites
+    [userId],
   );
 
   useEffect(() => {
     fetchData(false);
-  }, [fetchData]); // <<< 5. onRefresh (TETAP SAMA, SUDAH BENAR) >>>
+  }, [fetchData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchData(true);
     fetchUnreadCount();
-    fetchProfile(true); // Panggil refresh profil dari context
-  }, [fetchData, fetchUnreadCount, fetchProfile]); // --- (Logika handleToggleFavorite) ---
+    fetchProfile(true);
+  }, [fetchData, fetchUnreadCount, fetchProfile]);
 
   const handleToggleFavorite = useCallback(
     async (materiId, isCurrentlyFavorite) => {
@@ -163,7 +157,7 @@ const HomeScreen = ({ navigation }) => {
         }
         currentUserId = user.id;
         setUserId(currentUserId);
-      } // Optimistic update
+      }
 
       const newFavoriteIds = new Set(favoriteIds);
       if (isCurrentlyFavorite) {
@@ -180,7 +174,7 @@ const HomeScreen = ({ navigation }) => {
           .match({ user_id: currentUserId, materi_id: materiId });
         if (error) {
           Alert.alert('Error', error.message);
-          newFavoriteIds.add(materiId); // Rollback optimistic update
+          newFavoriteIds.add(materiId);
           setFavoriteIds(newFavoriteIds);
         }
       } else {
@@ -189,13 +183,13 @@ const HomeScreen = ({ navigation }) => {
           .insert({ user_id: currentUserId, materi_id: materiId });
         if (error) {
           Alert.alert('Error', error.message);
-          newFavoriteIds.delete(materiId); // Rollback optimistic update
+          newFavoriteIds.delete(materiId);
           setFavoriteIds(newFavoriteIds);
         }
       }
     },
     [userId, favoriteIds],
-  ); // --- (useMemo dan Handlers lain tetap sama) ---
+  );
 
   const filteredMateriPopuler = useMemo(
     () => filterMateri(materiPopuler, searchQuery),
@@ -213,11 +207,33 @@ const HomeScreen = ({ navigation }) => {
     () => filterMateri(materiSejarahLain, searchQuery),
     [searchQuery, materiSejarahLain],
   );
-  const handleSeeAllPopuler = () => console.log('Lihat Semua Materi Populer');
-  const handleSeeAllBudaya = () => console.log('Lihat Semua Budaya');
-  const handleSeeAllTokoh = () => console.log('Lihat Semua Tokoh Nasional');
+
+  // --- (INI PERBAIKANNYA) ---
+  const handleSeeAllPopuler = () =>
+    navigation.navigate('MateriList', {
+      title: 'Materi Populer',
+      filterType: 'popular', // Kirim 'popular'
+    });
+  const handleSeeAllBudaya = () =>
+    navigation.navigate('MateriList', {
+      title: 'Kebudayaan Daerah',
+      filterType: 'category', // Kirim 'category'
+      filterValue: 2, // ID Kategori Budaya
+    });
+  const handleSeeAllTokoh = () =>
+    navigation.navigate('MateriList', {
+      title: 'Tokoh Nasional',
+      filterType: 'category',
+      filterValue: 3, // ID Kategori Tokoh
+    });
   const handleSeeAllSejarahLain = () =>
-    console.log('Lihat Semua Sejarah yg Tdk Diketahui');
+    navigation.navigate('MateriList', {
+      title: 'Sejarah yang Tidak Diketahui',
+      filterType: 'category',
+      filterValue: 4, // ID Kategori Sejarah Lain
+    });
+  // --- (BATAS PERBAIKAN) ---
+
   const onHeaderLayout = event => {
     const { height } = event.nativeEvent.layout;
     if (height > 0 && height !== headerHeight) {
@@ -232,35 +248,28 @@ const HomeScreen = ({ navigation }) => {
     else if (actionId === 'quiz') navigation.navigate('QuizList');
     else if (actionId === 'market') navigation.navigate('MarketPlace');
     else if (actionId === 'diskusi') navigation.navigate('DiscussionChoice');
-  }; // --- (Batas Handlers) ---
+  };
   return (
     <SafeAreaView style={styles.safeArea}>
-           {' '}
       <StatusBar
         barStyle="light-content"
         backgroundColor="#4A2F2F"
         translucent={false}
       />
-            {/* <<< 6. HAPUS PROPS PROFIL DARI HEADER >>> */}
-           {' '}
-      <Header // HAPUS: userName, level, points, avatarUrl
+      <Header
         onNotificationPress={() => navigation.navigate('Notifications')}
-        onLayout={onHeaderLayout} // HAPUS: navigation (karena Header.js sudah pakai useNavigation)
+        onLayout={onHeaderLayout}
       />
-            {/* --- (Sisa JSX tetap sama) --- */}     {' '}
       {headerHeight > 0 && (
         <View
           style={[styles.searchBarContainer, { top: searchBarTopPosition }]}
         >
-                   {' '}
           <SearchBar
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
           />
-                 {' '}
         </View>
       )}
-           {' '}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
@@ -275,17 +284,16 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
-                <QuickActions onActionPress={handleQuickAction} />
-               {' '}
+        <QuickActions onActionPress={handleQuickAction} />
+
         <SectionHeader
           title="Materi Populer"
           onSeeAllPress={handleSeeAllPopuler}
         />
-               {' '}
+
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
-                        <Text style={styles.loadingText}>Memuat...</Text>       
-             {' '}
+            <Text style={styles.loadingText}>Memuat...</Text>
           </View>
         ) : (
           <HorizontalCardList
@@ -297,12 +305,12 @@ const HomeScreen = ({ navigation }) => {
             onToggleFavorite={handleToggleFavorite}
           />
         )}
-               {' '}
+
         <SectionHeader
           title="Kebudayaan Daerah"
           onSeeAllPress={handleSeeAllBudaya}
         />
-               {' '}
+
         <HorizontalCardList
           data={filteredMateriBudaya}
           onCardPress={item =>
@@ -311,12 +319,12 @@ const HomeScreen = ({ navigation }) => {
           favoriteMateriIds={favoriteIds}
           onToggleFavorite={handleToggleFavorite}
         />
-               {' '}
+
         <SectionHeader
           title="Tokoh Nasional"
           onSeeAllPress={handleSeeAllTokoh}
         />
-               {' '}
+
         <HorizontalCardList
           data={filteredMateriTokoh}
           onCardPress={item =>
@@ -325,12 +333,12 @@ const HomeScreen = ({ navigation }) => {
           favoriteMateriIds={favoriteIds}
           onToggleFavorite={handleToggleFavorite}
         />
-               {' '}
+
         <SectionHeader
           title="Sejarah yang Tidak Diketahui"
           onSeeAllPress={handleSeeAllSejarahLain}
         />
-               {' '}
+
         <HorizontalCardList
           data={filteredMateriSejarahLain}
           onCardPress={item =>
@@ -339,17 +347,14 @@ const HomeScreen = ({ navigation }) => {
           favoriteMateriIds={favoriteIds}
           onToggleFavorite={handleToggleFavorite}
         />
-             {' '}
       </ScrollView>
-           {' '}
-      <UnderDevelopmentModal isVisible={isModalVisible} onClose={closeModal} /> 
-       {' '}
+
+      <UnderDevelopmentModal isVisible={isModalVisible} onClose={closeModal} />
     </SafeAreaView>
   );
 };
 
 // --- (Styles tetap sama) ---
-// --- (Styles untuk HomeScreen) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

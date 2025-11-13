@@ -67,7 +67,7 @@ export const ProfileProvider = ({ session, children }) => {
           supabase
             .from('profiles')
             .select(
-              'username, full_name, mobile_no, dob, upi_id, points, level, avatar_url',
+              'username, full_name, mobile_no, dob, upi_id, points, level, avatar_url, plan',
             )
             .eq('id', userId)
             .single(),

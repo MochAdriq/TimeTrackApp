@@ -63,8 +63,11 @@ const ProfileScreen = ({ navigation }) => {
     message: '',
     modalType: 'error',
   });
-  const [timeLeft, setTimeLeft] = useState('Memuat...'); // Untuk timer // --- 3. EFEK & FUNGSI --- // Efek untuk sinkronisasi data form dari context
-
+  const [timeLeft, setTimeLeft] = useState('Memuat...');
+  const handleLevelTap = () => {
+    navigation.navigate('Profil');
+    navigation.closeDrawer();
+  };
   useEffect(() => {
     setProfileData(contextProfile);
     setOriginalProfileData(contextProfile);
@@ -115,14 +118,16 @@ const ProfileScreen = ({ navigation }) => {
 
   const handleSaveProfile = async () => {
     try {
+      // --- (INI PERBAIKANNYA) Hapus 'upi_id' ---
       const updates = {
         username: (profileData.username || '').trim(),
         full_name: (profileData.full_name || '').trim(),
         mobile_no: (profileData.mobile_no || '').trim() || null,
         dob: (profileData.dob || '').trim() || null,
-        upi_id: (profileData.upi_id || '').trim() || null,
+        // upi_id: (profileData.upi_id || '').trim() || null, // <-- HAPUS INI
         updated_at: new Date(),
       };
+      // --- (BATAS PERBAIKAN) ---
 
       await saveProfile(updates); // Panggil fungsi context
 
@@ -261,7 +266,7 @@ const ProfileScreen = ({ navigation }) => {
     }
   }; // --- 6. NAVIGASI ---
 
-  const handleTaskAction = () => navigation.navigate('Jelajahi');
+  const handleTaskAction = () => navigation.navigate('Jelajah');
   const handleChangePassword = () => navigation.navigate('ChangePassword');
   const handleHelp = () => navigation.navigate('SupportChat');
   const hideModal = () =>
@@ -349,21 +354,23 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={styles.profileName}>{profileData.full_name}</Text>
           <Text style={styles.profileUsername}>@{profileData.username}</Text>
         </View>
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={styles.statIcon}>🏆</Text>
-            <Text style={styles.statValue}>{profileData.level}</Text>
-            <Text style={styles.statLabel}>Level</Text>
+        <TouchableOpacity>
+          <View style={styles.statsContainer}>
+            <View style={styles.statBox}>
+              <Text style={styles.statIcon}>🏆</Text>
+              <Text style={styles.statValue}>{profileData.level}</Text>
+              <Text style={styles.statLabel}>Level</Text>
+            </View>
+            <View style={styles.statSeparator} />
+            <View style={styles.statBox}>
+              <Text style={styles.statIcon}>🔖</Text>
+              <Text style={styles.statValue}>
+                {profileData.points.toLocaleString('id-ID')}
+              </Text>
+              <Text style={styles.statLabel}>Poin</Text>
+            </View>
           </View>
-          <View style={styles.statSeparator} />
-          <View style={styles.statBox}>
-            <Text style={styles.statIcon}>🔖</Text>
-            <Text style={styles.statValue}>
-              {profileData.points.toLocaleString('id-ID')}
-            </Text>
-            <Text style={styles.statLabel}>Poin</Text>
-          </View>
-        </View>
+        </TouchableOpacity>
         <View style={styles.card}>
           <View style={styles.cardTitleContainer}>
             <Text style={styles.cardTitle}>Tugas Harian</Text>
@@ -442,14 +449,15 @@ const ProfileScreen = ({ navigation }) => {
             onChangeText={val => handleInputChange('dob', val)}
             placeholder="YYYY-MM-DD"
           />
+
+          {/* --- (INI PERBAIKANNYA) Ganti UPI dengan Plan --- */}
           <EditableInfoRow
-            label="UPI ID"
-            value={profileData.upi_id}
-            isEditing={isEditing}
-            onChangeText={val => handleInputChange('upi_id', val)}
-            placeholder="ID UPI (jika ada)"
+            label="Status Plan"
+            value={profileData.plan === 'premium' ? 'Premium' : 'Free'}
+            isEditing={false} // Tidak bisa diedit
             isLast
           />
+          {/* --- (BATAS PERBAIKAN) --- */}
         </View>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Pengaturan</Text>
@@ -492,7 +500,7 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-// --- STYLES (Dengan Penambahan untuk Timer) ---
+// --- (STYLES TETAP SAMA) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F4F4' },
   scrollView: { flex: 1 },
@@ -636,7 +644,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
-  }, // --- STYLE BARU ---
+  },
   cardTitleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -651,8 +659,8 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333', // marginBottom dihapus dari sini
-  }, // --- STYLE BARU ---
+    color: '#333',
+  },
 
   taskHeader: {
     flexDirection: 'row',

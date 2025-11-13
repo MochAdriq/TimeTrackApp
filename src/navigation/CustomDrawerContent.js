@@ -145,13 +145,6 @@ const CustomDrawerContent = props => {
         <View style={styles.customButtonsContainer}>
           <TouchableOpacity
             style={styles.customButton}
-            onPress={() => handleNavigation('MarketPlace')}
-          >
-            <Text style={styles.customButtonText}>Beli buku</Text>
-            <Text style={styles.customButtonArrow}>{'>'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.customButton}
             // onPress={() => handleNavigation('Premium')}
           >
             <Text style={styles.customButtonText}>Daftar Member</Text>

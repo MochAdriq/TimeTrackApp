@@ -1,4 +1,3 @@
-// App.tsx
 import 'react-native-url-polyfill/auto'; // <<< Tetap di baris 1
 import React, { useState, useEffect } from 'react';
 import { Session } from '@supabase/supabase-js';
@@ -11,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NotificationProvider } from './src/context/NotificationContext';
 import { ProfileProvider } from './src/context/ProfileContext';
 
+// PASTIKAN navigationRef DI-IMPORT
 import { navigationRef } from './src/navigation/navigationRef';
 
 // --- FUNGSI HELPER (Tetap sama) ---
@@ -33,55 +33,85 @@ const App = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // --- MODIFIKASI TOTAL useEffect (STRATEGI FINAL) ---
+  // --- useEffect DENGAN LOGIKA NAVIGASI YANG DIPERBAIKI ---
   useEffect(() => {
     setLoading(true);
 
     // 1. Cek sesi awal
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       console.log(
         'DEBUG (App.tsx): Sesi awal saat load:',
-        session ? 'Ada Sesi' : 'NULL',
+        initialSession ? 'Ada Sesi' : 'NULL',
       );
-      setSession(session);
+      setSession(initialSession);
       setLoading(false);
     });
 
-    // 2. Listener AuthStateChange (INI UNTUK NAVIGASI OTOMATIS)
+    // 2. Listener AuthStateChange
     const {
       data: { subscription: authListener },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
       console.log('DEBUG (App.tsx): Event AuthStateChange terdeteksi!');
       console.log('DEBUG (App.tsx): Event Type:', _event);
 
-      // --- INI LOGIKA KUNCI YANG BARU ---
-
-      // A. Jika event-nya PASSWORD_RECOVERY
-      if (_event === 'PASSWORD_RECOVERY') {
-        console.log(
-          'DEBUG (App.tsx): PASSWORD_RECOVERY terdeteksi, navigasi ke NewPassword...',
-        );
-        navigationRef.navigate('NewPassword');
-        return; // Jangan setSessi on, biarkan di state recovery
-      }
-
-      // B. Jika event-nya SIGNED_OUT (setelah update password)
+      // --- INI PERBAIKANNYA ---
+      // A. Jika event-nya SIGNED_OUT (setelah update password)
       if (_event === 'SIGNED_OUT') {
         console.log(
-          'DEBUG (App.tsx): SIGNED_OUT terdeteksi, navigasi ke Login...',
+          'DEBUG (App.tsx): SIGNED_OUT terdeteksi. Set session null DULU, lalu RESET.',
         );
-        // Navigasi manual ke tumpukan Auth, layar Login
-        navigationRef.navigate('Auth', { screen: 'Login' });
+
+        // 1. SET SESI DULU
+        // Ini akan memicu AppNavigator untuk me-render ulang dan menampilkan stack 'Auth'.
+        setSession(newSession); // newSession is null here
+
+        // 2. LAKUKAN RESET
+        // Kita tunda reset ke tick berikutnya (setelah re-render)
+        // menggunakan setTimeout(..., 0)
+        setTimeout(() => {
+          if (navigationRef.isReady()) {
+            console.log('DEBUG (App.tsx): Menjalankan reset...');
+            navigationRef.reset({
+              index: 0,
+              routes: [
+                {
+                  name: 'Auth', // Nama stack Auth di AppNavigator
+                  state: {
+                    index: 0,
+                    routes: [{ name: 'Login' }], // Nama layar Login di dalam Auth
+                  },
+                },
+              ],
+            });
+          }
+        }, 0); // Penundaan 0ms (next tick)
+        // --- BATAS PERBAIKAN ---
+
+        return; // Hentikan (agar tidak setSession lagi di bawah)
+      }
+      // --- BATAS PERBAIKAN ---
+
+      // B. Jika event-nya SIGNED_IN (dari deep link ATAU login biasa)
+      if (_event === 'SIGNED_IN') {
+        console.log('DEBUG (App.tsx): SIGNED_IN terdeteksi.');
+
+        // Cek apakah kita *sudah* berada di NewPasswordScreen?
+        const currentRoute = navigationRef.getCurrentRoute();
+        if (currentRoute?.name === 'NewPassword') {
+          console.log(
+            'DEBUG (App.tsx): Sedang di NewPasswordScreen. Abaikan navigasi, CUKUP set session.',
+          );
+          setSession(newSession); // CUKUP set session agar updateUser berfungsi
+          return; // JANGAN lakukan navigasi standar
+        }
       }
 
-      // --- BATAS LOGIKA KUNCI ---
-
-      // Untuk event lain (SIGNED_IN, INITIAL_SESSION, USER_UPDATED)
+      // Untuk event lain (SIGNED_IN biasa, INITIAL_SESSION, USER_UPDATED)
       // cukup update sesi seperti biasa.
-      setSession(session);
+      setSession(newSession);
     });
 
-    // 3. Listener Deep Link (INI UNTUK MEMICU EVENT)
+    // 3. Listener Deep Link (INI YANG MENANGANI RECOVERY)
     const handleDeepLink = (url: string | null) => {
       if (!url) return;
       console.log('DEBUG (App.tsx): Deep link terdeteksi:', url);
@@ -89,12 +119,36 @@ const App = () => {
       const sessionData = parseUrlHash(url);
 
       if (sessionData) {
-        console.log(
-          'DEBUG (App.tsx): Token ditemukan di URL, mengatur sesi manual...',
-        );
+        // Jika tipenya 'recovery', kita HARUS set session DAN navigasi
+        if (sessionData.type === 'recovery') {
+          console.log(
+            'DEBUG (App.tsx): Tipe "recovery". Set session DAN navigasi...',
+          );
 
-        // Atur sesi. Ini akan memicu onAuthStateChange di atas
-        // dengan event 'PASSWORD_RECOVERY'
+          // 1. Set session agar updateUser() berfungsi
+          supabase.auth.setSession({
+            access_token: sessionData.access_token,
+            refresh_token: sessionData.refresh_token,
+          });
+
+          // 2. Navigasi ke NewPasswordScreen
+          // Kita perlu pastikan navigator sudah siap
+          const checkAndNavigate = () => {
+            if (navigationRef.isReady()) {
+              navigationRef.navigate('NewPassword');
+            } else {
+              setTimeout(checkAndNavigate, 100); // Coba lagi jika belum siap
+            }
+          };
+          checkAndNavigate();
+
+          return; // Selesai
+        }
+
+        // Jika BUKAN recovery (misal. konfirmasi email), baru atur sesi
+        console.log(
+          'DEBUG (App.tsx): Token ditemukan (bukan recovery), mengatur sesi manual...',
+        );
         supabase.auth.setSession({
           access_token: sessionData.access_token,
           refresh_token: sessionData.refresh_token,
@@ -112,13 +166,13 @@ const App = () => {
 
     return () => {
       authListener?.unsubscribe();
-      linkingSubscription.remove(); // Hapus listener Linking
+      linkingSubscription.remove();
     };
   }, []);
-  // --- BATAS MODIFIKASI useEffect ---
+  // --- BATAS PERBAIKAN useEffect ---
 
+  // ... (sisa file App.tsx tetap sama) ...
   if (loading) {
-    // ... (Loading UI tetap sama) ...
     return (
       <View
         style={{
@@ -139,6 +193,7 @@ const App = () => {
       <SafeAreaProvider>
         <NotificationProvider session={session}>
           <ProfileProvider session={session}>
+            {/* AppNavigator akan menerima 'ref' */}
             <AppNavigator session={session} />
           </ProfileProvider>
         </NotificationProvider>

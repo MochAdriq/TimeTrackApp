@@ -1,68 +1,123 @@
-// src/features/Notification/components/NotificationItem.js
 import React from 'react';
-// <<< 1. IMPORT TouchableOpacity dan useNavigation >>>
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 // --- Import Ikon ---
 import BellTaskIcon from '../../../assets/icon/BellTaskIcon.svg';
 import TaskIcon from '../../../assets/icon/TaskIcon.svg';
-import ChatIcon from '../../../assets/icon/ChatIcon.svg'; // <<< 2. IMPORT IKON CHAT
+import ChatIcon from '../../../assets/icon/ChatIcon.svg';
+import QuizIcon from '../../../assets/icon/QuizIcon.svg';
+import InfoIcon from '../../../assets/icon/InfoIcon.svg';
+import MateriIcon from '../../../assets/icon/JelajahIconInactive.svg'; // Asumsi ikon materi
 
-// Fungsi helper untuk menentukan ikon (contoh)
+// Fungsi helper untuk menentukan ikon (SESUAI TIPE BARU)
 const getIcon = type => {
-  if (type === 'reminder') {
-    // return <BellIcon width={24} height={24} fill="#FF6B6B" />;
-    return <BellTaskIcon width={24} height={24} />; // Placeholder
-  } else if (type === 'task') {
-    // return <TaskIcon width={24} height={24} fill="#4ECDC4" />;
-    return <TaskIcon width={24} height={24} />; // Placeholder
+  if (type === 'QUIZ_NEW') {
+    return <QuizIcon width={24} height={24} />;
+  } else if (type === 'MATERI_NEW') {
+    return <MateriIcon width={24} height={24} fill="#4CAF50" />;
+  } else if (type === 'SYSTEM') {
+    // Untuk Order
+    return <InfoIcon width={24} height={24} />;
   } else if (type === 'chat') {
-    // <<< 3. TAMBAHKAN CASE UNTUK 'chat' >>>
     return <ChatIcon width={24} height={24} fill="#4A90E2" />;
+  } else if (type === 'reminder') {
+    return <BellTaskIcon width={24} height={24} />;
+  } else if (type === 'QUIZ_COMPLETE') {
+    // Selesai Kuis
+    return <QuizIcon width={24} height={24} fill="#BDBDBD" />;
+  } else if (type === 'TASK') {
+    // Selesai Materi
+    return <TaskIcon width={24} height={24} />;
   } else {
-    // return <DefaultIcon width={24} height={24} fill="#888" />;
-    return <BellTaskIcon width={24} height={24} />; // Default
+    return <BellTaskIcon width={24} height={24} />;
   }
 };
 
-// Fungsi helper untuk warna background ikon (contoh)
+// Fungsi helper untuk warna background ikon
 const getIconBackground = type => {
-  if (type === 'reminder') return '#FFEBEE'; // Merah muda
-  if (type === 'task') return '#E0F2F7'; // Biru muda
-  if (type === 'chat') return '#E7F0FD'; // <<< 4. TAMBAHKAN CASE UNTUK 'chat'
-  return '#EEEEEE'; // Abu-abu
+  if (type === 'QUIZ_NEW') return '#E0F2F7';
+  if (type === 'MATERI_NEW') return '#E8F5E9';
+  if (type === 'SYSTEM') return '#FFF3E0';
+  if (type === 'chat') return '#E7F0FD';
+  if (type === 'reminder') return '#FFEBEE';
+  if (type === 'QUIZ_COMPLETE') return '#EEEEEE';
+  if (type === 'TASK') return '#EEEEEE';
+  return '#EEEEEE';
 };
 
-// <<< 5. UBAH PROPS: Terima 'item' lengkap, bukan properti terpisah >>>
 const NotificationItem = ({ item }) => {
   const navigation = useNavigation();
 
-  // <<< 6. BUAT FUNGSI handlePress UNTUK NAVIGASI >>>
+  // (INI FUNGSI UTAMA YANG DIPERBAIKI)
   const handlePress = () => {
-    const screen = item.navigation_screen;
-    const params = item.navigation_params;
+    const { metadata, navigation_screen, navigation_params, type } = item;
 
-    // Cek jika ada data navigasi di notifikasi
-    if (screen) {
-      console.log(`Navigasi ke: ${screen} dengan params:`, params);
-      navigation.navigate(screen, params);
+    // --- Skenario 1: Notifikasi dengan METADATA (Sistem BARU) ---
+    if (metadata && metadata.entity_type) {
+      const { entity_type, entity_id } = metadata;
+
+      console.log(`Navigasi (Metadata): ${entity_type} ID: ${entity_id}`);
+
+      // (INI LOGIKA BARU YANG LEBIH SEDERHANA)
+      if (entity_type === 'order' && type === 'SYSTEM') {
+        // Arahkan SEMUA status order ke PaymentStatusScreen
+        navigation.navigate('PaymentStatus', {
+          orderId: entity_id,
+        });
+      }
+      // (BATAS LOGIKA BARU)
+      else if (entity_type === 'quiz' && type === 'QUIZ_NEW') {
+        navigation.navigate('QuizDetail', {
+          id: entity_id,
+        });
+      } else if (entity_type === 'materi' && type === 'MATERI_NEW') {
+        navigation.navigate('MateriDetail', {
+          materiId: entity_id,
+        });
+      }
+
+      // --- Skenario 2: Notifikasi dengan NAVIGASI LAMA (Admin/Chat) ---
+    } else if (navigation_screen && (type === 'chat' || type === 'reminder')) {
+      console.log(
+        `Navigasi (Legacy): ${navigation_screen} Params:`,
+        navigation_params,
+      );
+      navigation.navigate(navigation_screen, navigation_params);
     } else {
-      console.log('Notifikasi ini tidak memiliki aksi navigasi.');
+      // Ini akan menangkap 'TASK' (Selesai Materi) dan 'QUIZ_COMPLETE' (Selesai Kuis)
+      console.log(`Notifikasi tipe ${type} tidak memiliki aksi navigasi.`);
     }
   };
 
   // Ambil data dari item
-  const { type, title, message, time, badgeCount } = item;
+  const {
+    type,
+    title,
+    message,
+    time,
+    badgeCount,
+    metadata,
+    navigation_screen,
+  } = item;
+
+  // (LOGIKA isClickable DIPERBAIKI)
+  let isClickable = false;
+  if (type === 'SYSTEM' || type === 'QUIZ_NEW' || type === 'MATERI_NEW') {
+    isClickable = metadata && metadata.entity_type; // Cek metadata
+  } else if (type === 'chat' || type === 'reminder') {
+    isClickable = !!navigation_screen; // Cek navigasi lama
+  }
+  // Notifikasi 'TASK' dan 'QUIZ_COMPLETE' akan 'false'
 
   return (
-    // <<< 7. UBAH View MENJADI TouchableOpacity >>>
     <TouchableOpacity
       style={styles.container}
       onPress={handlePress}
-      activeOpacity={0.7}
+      disabled={!isClickable}
+      activeOpacity={isClickable ? 0.7 : 1.0}
     >
-      {/* Ikon */}
+      {/* (Sisa UI tetap sama persis) */}
       <View
         style={[
           styles.iconContainer,
@@ -71,8 +126,6 @@ const NotificationItem = ({ item }) => {
       >
         <View style={styles.iconPlaceholder}>{getIcon(type)}</View>
       </View>
-
-      {/* Teks Notifikasi */}
       <View style={styles.textContainer}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -81,18 +134,15 @@ const NotificationItem = ({ item }) => {
           {message}
         </Text>
       </View>
-
-      {/* Waktu & Badge */}
       <View style={styles.metaContainer}>
         <Text style={styles.time}>{time}</Text>
-        {badgeCount > 0 && ( // Tampilkan badge jika count > 0
-          <View style={styles.badge} /> // <<< 8. Ubah jadi titik saja
-        )}
+        {badgeCount > 0 && <View style={styles.badge} />}
       </View>
     </TouchableOpacity>
   );
 };
 
+// --- (STYLES TETAP SAMA PERSIS) ---
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
@@ -101,7 +151,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     marginBottom: 10,
-    // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
@@ -111,17 +160,16 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 45,
     height: 45,
-    borderRadius: 22.5, // Setengah width/height
+    borderRadius: 22.5,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
   },
   iconPlaceholder: {
-    // Hapus jika sudah pakai ikon asli
     fontSize: 20,
   },
   textContainer: {
-    flex: 1, // Agar mengisi ruang sisa
+    flex: 1,
     marginRight: 10,
   },
   title: {
@@ -136,8 +184,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   metaContainer: {
-    alignItems: 'flex-end', // Rata kanan
-    minWidth: 50, // <<< Beri lebar minimum
+    alignItems: 'flex-end',
+    minWidth: 50,
   },
   time: {
     fontSize: 11,
@@ -145,12 +193,11 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   badge: {
-    backgroundColor: '#FF0000', // Merah
+    backgroundColor: '#FF0000',
     borderRadius: 6,
     width: 12,
     height: 12,
   },
-  badgeText: {},
 });
 
 export default NotificationItem;

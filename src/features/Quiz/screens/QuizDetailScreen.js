@@ -56,7 +56,7 @@ const QuizDetailScreen = ({ route, navigation }) => {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Waktu Pengerjaan</Text>
             <Text style={styles.infoValue}>
-              {quizItem.duration || 'Tidak terbatas'}
+              {quizItem.duration || 'Tidak terbatas'} menit
             </Text>
           </View>
 
