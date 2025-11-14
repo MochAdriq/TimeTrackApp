@@ -1,4 +1,4 @@
-// src/features/Discussion/screens/CommunityGroupListScreen.js
+// src/features/Discussion/screens/PremiumGroupListScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -16,7 +16,7 @@ import GroupChatListItem from './GroupChatListItem';
 import { supabase } from '../../../services/supabaseClient';
 import InfoModal from '../../../components/common/InfoModal';
 
-const CommunityGroupListScreen = ({ navigation }) => {
+const PremiumGroupListScreen = ({ navigation }) => {
   const [groupList, setGroupList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [joiningRoom, setJoiningRoom] = useState(false);
@@ -38,7 +38,7 @@ const CommunityGroupListScreen = ({ navigation }) => {
         .from('chat_rooms')
         .select('*')
         .eq('type', 'community') // Tipe tetap 'community'
-        .eq('is_premium', false) // <-- HANYA AMBIL GRUP GENERAL (GRATIS)
+        .eq('is_premium', true) // <-- HANYA AMBIL GRUP PREMIUM
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -115,7 +115,6 @@ const CommunityGroupListScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
 
-      {/* Judul sudah benar: "Grup Komunitas" */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -123,7 +122,8 @@ const CommunityGroupListScreen = ({ navigation }) => {
         >
           <Text style={styles.headerBackText}>{'<'}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Grup Komunitas</Text>
+        {/* --- (PERBAIKAN 2) Ganti Judul --- */}
+        <Text style={styles.headerTitle}>Grup Premium</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -143,10 +143,10 @@ const CommunityGroupListScreen = ({ navigation }) => {
           ListEmptyComponent={
             !loading && (
               <View style={styles.emptyContainer}>
-                {/* Teks empty sudah sesuai */}
-                <Text style={styles.emptyText}>Belum ada grup tersedia.</Text>
+                {/* --- (PERBAIKAN 3) Ganti Teks Empty --- */}
+                <Text style={styles.emptyText}>Belum Ada Grup Premium.</Text>
                 <Text style={styles.emptySubText}>
-                  Jadilah yang pertama membuat grup!
+                  Grup eksklusif akan segera hadir di sini.
                 </Text>
               </View>
             )
@@ -154,13 +154,9 @@ const CommunityGroupListScreen = ({ navigation }) => {
         />
       )}
 
-      {/* Tombol FAB (+) tetap ada di sini */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('CreateGroup')}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+      {/* --- (PERBAIKAN 4) Hapus Tombol FAB (Tombol +) --- */}
+      {/* Tombol FAB dihapus dari sini */}
+      {/* --- (BATAS PERBAIKAN 4) --- */}
 
       <Modal isVisible={joiningRoom} style={styles.joiningModal}>
         <View style={styles.joiningContainer}>
@@ -226,27 +222,7 @@ const styles = StyleSheet.create({
     color: '#AAA',
     textAlign: 'center',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 25,
-    right: 25,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#6A453C',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  fabText: {
-    fontSize: 30,
-    color: '#FFFFFF',
-    lineHeight: 32,
-  },
+  // Tombol FAB dihapus dari style
   joiningModal: {
     margin: 0,
     justifyContent: 'center',
@@ -266,4 +242,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CommunityGroupListScreen;
+export default PremiumGroupListScreen;

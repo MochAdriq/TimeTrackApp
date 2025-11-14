@@ -45,6 +45,7 @@ import PremiumCheckoutScreen from '../features/Premium/screens/PremiumCheckoutSc
 import { navigationRef } from './navigationRef';
 import PremiumTransferScreen from '../features/Premium/screens/PremiumTransferScreen';
 import MateriListScreen from '../features/Materi/screens/MateriListScreen';
+import PremiumGroupListScreen from '../features/Discussion/screens/PremiumGroupListScreen';
 
 const RootStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
@@ -153,6 +154,10 @@ const AppNavigator = ({ session }) => {
             <RootStack.Screen
               name="CommunityGroupList"
               component={CommunityGroupListScreen}
+            />
+            <RootStack.Screen
+              name="PremiumGroupList"
+              component={PremiumGroupListScreen}
             />
             <RootStack.Screen name="ChatScreen" component={ChatScreen} />
             <RootStack.Screen name="MyChatList" component={MyChatListScreen} />

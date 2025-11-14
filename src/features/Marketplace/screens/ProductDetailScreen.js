@@ -286,12 +286,12 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
           <View style={styles.metaContainer}>
             <Text style={styles.metaText}>Terjual {itemSoldCount}</Text>
-            <View style={styles.ratingContainer}>
+            {/* <View style={styles.ratingContainer}>
               <View style={styles.starPlaceholder}>
                 <Text style={{ color: '#F9A825' }}>⭐</Text>
               </View>
               <Text style={styles.metaText}>{itemRating}</Text>
-            </View>
+            </View> */}
           </View>
 
           <Text style={styles.price}>

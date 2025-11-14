@@ -1,4 +1,3 @@
-// src/features/Discussion/screens/DiscussionChoiceScreen.js
 import React, { useState } from 'react'; // <<< 1. Import useState
 import {
   View,
@@ -8,34 +7,65 @@ import {
   StatusBar,
   TouchableOpacity,
   ScrollView,
+  Image,
 } from 'react-native';
+import { useProfile } from '../../../context/ProfileContext'; // <<< 2. Import useProfile
+import InfoModal from '../../../components/common/InfoModal'; // <<< 3. Import InfoModal
 
-// --- 2. Impor SVG Ikon Asli ---
-import PeopleIcon from '../../../assets/icon/PeopleIcon.svg';
-import GroupIcon from '../../../assets/icon/GroupIcon.svg';
-import ChatIcon from '../../../assets/icon/ChatIcon.svg';
-import UnderDevelopmentModal from '../../../components/common/UnderDevelopmentModal'; // <<< 3. Impor Modal
+// --- (PERBAIKAN) Komponen Pilihan ---
+const ChoiceCard = ({ icon, title, description, onPress, isPremium }) => (
+  <TouchableOpacity style={styles.card} onPress={onPress}>
+    <View style={styles.iconContainer}>
+      <Text style={styles.iconText}>{icon}</Text>
+    </View>
+    <View style={styles.textContainer}>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{title}</Text>
+        {isPremium && (
+          <View style={styles.premiumBadge}>
+            <Text style={styles.premiumText}>PREMIUM</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.description}>{description}</Text>
+    </View>
+    <Text style={styles.chevron}>›</Text>
+  </TouchableOpacity>
+);
+// --- (BATAS PERBAIKAN) ---
 
 const DiscussionChoiceScreen = ({ navigation }) => {
-  const [isModalVisible, setModalVisible] = useState(false);
+  // --- (PERBAIKAN 2) Ambil profil & state modal ---
+  const { profile } = useProfile();
+  const [modalVisible, setModalVisible] = useState(false);
 
-  const handleAskExpert = () => {
-    navigation.navigate('AskExpertList');
+  const handleNavigateToPremium = () => {
+    setModalVisible(false);
+    // Arahkan ke tab Premium (sesuai AppTabs.js)
+    navigation.navigate('Premium');
   };
 
-  const handleCommunityChat = () => {
-    navigation.navigate('CommunityGroupList');
+  const showPremiumModal = () => {
+    setModalVisible(true);
   };
 
-  const handleOpenChatList = () => {
-    navigation.navigate('MyChatList');
+  // --- (PERBAIKAN 3) Logika Premium Gate ---
+  const handleNavigation = (screenName, isPremiumFeature) => {
+    const isUserPremium = profile?.plan === 'premium';
+
+    if (isPremiumFeature && !isUserPremium) {
+      // Jika fitur premium DAN user BUKAN premium
+      showPremiumModal();
+    } else {
+      // Jika fitur gratis ATAU user premium
+      navigation.navigate(screenName);
+    }
   };
+  // --- (BATAS PERBAIKAN 3) ---
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-
-      {/* Header Kustom */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -43,74 +73,58 @@ const DiscussionChoiceScreen = ({ navigation }) => {
         >
           <Text style={styles.headerBackText}>{'<'}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ruang Diskusi</Text>
-        {/* --- 6. Ganti Ikon Header --- */}
-        <TouchableOpacity
-          onPress={handleOpenChatList}
-          style={styles.headerButton}
-        >
-          <ChatIcon width={24} height={24} fill="#FFF" />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Mulai Diskusi</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Mau Diskusi Apa Hari Ini?</Text>
-        <Text style={styles.subtitle}>
-          Pilih salah satu opsi di bawah ini untuk memulai diskusi.
-        </Text>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {/* --- (PERBAIKAN 4) Tiga Pilihan Baru --- */}
+        <ChoiceCard
+          icon="⭐"
+          title="Chat Ahli"
+          description="Tanya jawab eksklusif dengan para ahli (1-on-1)."
+          isPremium={true}
+          onPress={() => handleNavigation('AskExpertList', true)}
+        />
 
-        {/* Opsi 1: Tanya Ahli */}
-        <TouchableOpacity
-          style={[styles.optionCard, styles.expertCard]}
-          onPress={handleAskExpert}
-          activeOpacity={0.8}
-        >
-          <View style={styles.optionIconContainer}>
-            {/* --- 7. Ganti Ikon Ahli --- */}
-            <PeopleIcon width={40} height={40} fill="#6A453C" />
-          </View>
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>Tanya Ahli Sejarah</Text>
-            <Text style={styles.optionDescription}>
-              Ajukan pertanyaan langsung kepada ahli sejarah kami.
-            </Text>
-          </View>
-          <Text style={styles.optionArrow}>{'>'}</Text>
-        </TouchableOpacity>
+        <ChoiceCard
+          icon="👑"
+          title="Grup Premium"
+          description="Grup diskusi eksklusif dengan materi dan mentor premium."
+          isPremium={true}
+          onPress={() => handleNavigation('PremiumGroupList', true)}
+        />
 
-        {/* Opsi 2: Chat Grup Komunitas */}
-        <TouchableOpacity
-          style={[styles.optionCard, styles.communityCard]}
-          onPress={handleCommunityChat}
-          activeOpacity={0.8}
-        >
-          <View style={styles.optionIconContainer}>
-            {/* --- 8. Ganti Ikon Komunitas --- */}
-            <GroupIcon width={40} height={40} fill="#388E3C" />
-          </View>
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>Chat Grup Komunitas</Text>
-            <Text style={styles.optionDescription}>
-              Bergabung dalam diskusi grup dengan pengguna lain.
-            </Text>
-          </View>
-          <Text style={styles.optionArrow}>{'>'}</Text>
-        </TouchableOpacity>
+        <ChoiceCard
+          icon="👥"
+          title="Grup Komunitas"
+          description="Bergabung dengan grup diskusi general (publik)."
+          isPremium={false}
+          onPress={() => handleNavigation('CommunityGroupList', false)}
+        />
+        {/* --- (BATAS PERBAIKAN 4) --- */}
       </ScrollView>
 
-      {/* --- 9. Tambahkan Modal --- */}
-      <UnderDevelopmentModal
-        isVisible={isModalVisible}
+      {/* --- (PERBAIKAN 5) Tambah Modal --- */}
+      <InfoModal
+        isVisible={modalVisible}
+        title="Fitur Khusus Premium"
+        message="Untuk mengakses fitur ini, Anda harus meng-upgrade akun Anda ke Premium."
+        modalType="info" // Tipe 'info' (ikon info)
         onClose={() => setModalVisible(false)}
+        confirmText="Lihat Paket Premium"
+        onConfirm={handleNavigateToPremium}
       />
+      {/* --- (BATAS PERBAIKAN 5) --- */}
     </SafeAreaView>
   );
 };
 
+// --- (STYLE BARU) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8F8F8', // Background abu-abu sangat muda
+    backgroundColor: '#F4F4F4',
   },
   header: {
     flexDirection: 'row',
@@ -118,77 +132,73 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 15,
     paddingVertical: 12,
-    backgroundColor: '#6A453C', // Coklat header
+    backgroundColor: '#6A453C',
   },
-  headerButton: { padding: 5, minWidth: 40, alignItems: 'center' },
+  headerButton: { padding: 5, minWidth: 40, alignItems: 'flex-start' },
   headerBackText: { fontSize: 28, color: '#FFFFFF', fontWeight: 'bold' },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
-  container: {
-    flexGrow: 1,
+  scrollContainer: {
     padding: 20,
-    alignItems: 'center', // Pusatkan kartu pilihan
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 30, // Jarak ke kartu pertama
-    maxWidth: '85%', // Batasi lebar subtitle
-  },
-  optionCard: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
     borderRadius: 15,
     padding: 20,
-    width: '100%', // Lebar penuh
-    marginBottom: 20, // Jarak antar kartu
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
     elevation: 3,
   },
-  expertCard: {
-    backgroundColor: '#E3D5B8', // Background krem/beige
-  },
-  communityCard: {
-    backgroundColor: '#C8E6C9', // Background hijau muda (contoh)
-  },
-  optionIconContainer: {
+  iconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F0EBE3',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 15,
-    width: 40, // Beri lebar tetap
-    alignItems: 'center', // Pusatkan ikon
   },
-  optionIcon: {
-    fontSize: 35, // Ukuran ikon (emoji)
+  iconText: {
+    fontSize: 24,
   },
-  optionTextContainer: {
-    flex: 1, // Agar mengisi ruang sisa
-    marginRight: 10,
+  textContainer: {
+    flex: 1,
   },
-  optionTitle: {
-    fontSize: 16,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#444', // Warna judul opsi
-    marginBottom: 3,
+    color: '#333',
   },
-  optionDescription: {
+  premiumBadge: {
+    backgroundColor: '#FFD700', // Warna emas
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  premiumText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#4A2F2F',
+  },
+  description: {
     fontSize: 13,
-    color: '#666', // Warna deskripsi
+    color: '#666',
     lineHeight: 18,
   },
-  optionArrow: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#A0A0A0', // Warna panah abu-abu
+  chevron: {
+    fontSize: 20,
+    color: '#BDBDBD',
+    marginLeft: 10,
   },
 });
 

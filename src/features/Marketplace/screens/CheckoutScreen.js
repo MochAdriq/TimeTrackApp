@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; // <<< IMPORT BARU
 import {
   View,
   Text,
@@ -9,57 +9,54 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
-  Alert,
   Platform,
   ActivityIndicator,
-  Switch, // <<< 1. Import Switch
+  Switch,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native'; // <<< IMPORT BARU
 
 import { supabase } from '../../../services/supabaseClient';
 import InfoModal from '../../../components/common/InfoModal';
-import { useProfile } from '../../../context/ProfileContext'; // <<< 2. Import useProfile
+import { useProfile } from '../../../context/ProfileContext';
 
 const placeholderImage = require('../../../../src/assets/images/dummyImage.png');
 
-// --- (FungSI BARU) Helper untuk format Rupiah ---
 const formatCurrency = value => `Rp ${value.toLocaleString('id-ID')}`;
 
-// --- (KOMPONEN DIREVISI) InfoCardRow ---
-// (Dihapus 'onPress' dari Alamat, karena kita pakai TextInput)
-const InfoCardRow = ({ title, value, valueStyle }) => (
+// --- (MODIFIKASI) Komponen InfoCardRow ---
+const InfoCardRow = ({ title, value, valueStyle, children }) => (
   <View style={[styles.card, styles.row]}>
     <Text style={styles.cardTitle}>{title}</Text>
-    <View style={styles.rowEndContainer}>
-      <Text style={[styles.valueText, valueStyle]} numberOfLines={3}>
-        {value}
-      </Text>
-    </View>
+    {value && (
+      <View style={styles.rowEndContainer}>
+        <Text style={[styles.valueText, valueStyle]} numberOfLines={3}>
+          {value}
+        </Text>
+      </View>
+    )}
+    {children}
   </View>
 );
 
-// --- HAPUS: PAYMENT_OPTIONS (Kita ambil dari DB) ---
-// (Kita akan ambil 1 pembayaran default dari TransferDetailsScreen.js)
-const DEFAULT_PAYMENT = {
-  name: 'Transfer Bank (Admin)',
-  account: 'Akan diinfokan di halaman selanjutnya',
-};
+// --- (HAPUS) DEFAULT_PAYMENT ---
 
 const CheckoutScreen = ({ route, navigation }) => {
-  // --- 4. Ambil data 'cartItems' (BUKAN 'product') ---
   const { cartItems } = route.params || {};
 
-  // --- 5. State baru ---
-  // Ambil profil dari Context
+  // --- Ambil profil dari Context ---
   const { profile, loading: loadingProfile, fetchProfile } = useProfile();
 
   const [placingOrder, setPlacingOrder] = useState(false);
   const [message, setMessage] = useState('');
-
-  // (PERBAIKAN) Set alamat & pembayaran
   const [shippingAddress, setShippingAddress] = useState(
     profile?.address || '',
-  ); // State untuk alamat
-  const [selectedPayment, setSelectedPayment] = useState(DEFAULT_PAYMENT);
+  );
+
+  // --- (STATE BARU) Untuk Pembayaran ---
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [loadingPayments, setLoadingPayments] = useState(true);
+  const [selectedPayment, setSelectedPayment] = useState(null); // Mulai dari null
+  // ---
 
   // (STATE BARU) Untuk Diskon Poin
   const [usePoints, setUsePoints] = useState(false);
@@ -69,27 +66,54 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
-  // --- HAPUS: shippingCost & userAddress (Hardcoded) ---
-
-  // --- 6. Fungsi Fetch Profile (MODIFIKASI: Ambil 'points') ---
+  // --- (PERBAIKAN) Ambil profil jika belum ada ---
   useEffect(() => {
-    // Kita panggil fetchProfile dari context
-    // Pastikan ProfileContext.js mengambil 'points'
     if (!profile) {
       fetchProfile();
     }
   }, [profile, fetchProfile]);
 
-  // --- 7. Fungsi showError (Tetap sama) ---
+  // --- (FITUR BARU) Ambil Metode Pembayaran dari DB ---
+  useFocusEffect(
+    useCallback(() => {
+      const fetchPaymentMethods = async () => {
+        setLoadingPayments(true);
+        setSelectedPayment(null); // Reset pilihan
+        try {
+          const { data, error } = await supabase
+            .from('payment_methods')
+            .select('*')
+            .eq('is_active', true)
+            .eq('type', 'marketplace') // Ambil hanya untuk 'marketplace'
+            .order('bank_name', { ascending: true });
+
+          if (error) throw error;
+
+          setPaymentMethods(data || []);
+
+          // (VISI BOSS) Otomatis pilih jika hanya ada 1
+          if (data && data.length === 1) {
+            setSelectedPayment(data[0]);
+          }
+        } catch (error) {
+          showError('Gagal Memuat Bank', error.message);
+        } finally {
+          setLoadingPayments(false);
+        }
+      };
+
+      fetchPaymentMethods();
+    }, []),
+  );
+  // ---
+
   const showError = (title, message) => {
     setModalTitle(title);
     setModalMessage(message);
     setModalVisible(true);
   };
 
-  // --- HAPUS: handleSelectPayment, handleEditAddress, handleSelectShipping ---
-
-  // --- 8. Hitung Total (LOGIKA BARU) ---
+  // --- (LOGIKA TOTAL) (Tidak Berubah) ---
   const { totalOrder, totalQuantity } = useMemo(() => {
     if (!cartItems) return { totalOrder: 0, totalQuantity: 0 };
     let total = 0;
@@ -102,22 +126,25 @@ const CheckoutScreen = ({ route, navigation }) => {
   }, [cartItems]);
 
   const userPoints = profile?.points || 0;
-  const pointsConversionRate = 1; // ASUMSI: 1 Poin = Rp 1
+  const pointsConversionRate = 1;
   const maxDiscount = Math.min(userPoints / pointsConversionRate, totalOrder);
 
   const discountAmount = usePoints ? maxDiscount : 0;
   const pointsUsed = usePoints ? maxDiscount * pointsConversionRate : 0;
-  const totalPayment = totalOrder - discountAmount; // Hapus shippingCost
-  // --- (BATAS LOGIKA BARU) ---
+  const totalPayment = totalOrder - discountAmount;
+  // ---
 
-  // --- 9. Fungsi Buat Pesanan (LOGIKA UTAMA DIMODIFIKASI) ---
+  // --- (MODIFIKASI BESAR) Fungsi Buat Pesanan ---
   const handlePlaceOrder = async () => {
+    // (VALIDASI BARU)
     if (!selectedPayment) {
-      showError('Perhatian', 'Metode pembayaran tidak valid.');
+      showError(
+        'Perhatian',
+        'Silakan pilih metode pembayaran terlebih dahulu.',
+      );
       return;
     }
 
-    // (PERBAIKAN) Validasi Alamat
     if (!shippingAddress || shippingAddress.trim().length < 10) {
       showError(
         'Perhatian',
@@ -142,13 +169,17 @@ const CheckoutScreen = ({ route, navigation }) => {
         user_id: user.id,
         total_amount: totalPayment,
         status: 'pending_payment',
-        shipping_address: shippingAddress.trim(), // <-- Alamat dari state
-        shipping_cost: 0, // <-- Dihapus
+        shipping_address: shippingAddress.trim(),
+        shipping_cost: 0,
         admin_fee: 0,
-        payment_method_name: selectedPayment.name,
-        payment_account_info: selectedPayment.account,
         user_message: message,
-        points_used: pointsUsed, // <-- (FITUR BARU) Simpan poin
+        points_used: pointsUsed,
+        // --- (PERBAIKAN KUNCI DATABASE) ---
+        payment_method_id: selectedPayment.id, // Simpan ID bank
+        // Hapus kolom yang salah
+        // payment_method_name: ... (dihapus, kita pakai ID)
+        // payment_account_info: ... (dihapus, ini BUG-nya)
+        // ---
       };
 
       // 3. Insert ke tabel 'orders'
@@ -176,8 +207,7 @@ const CheckoutScreen = ({ route, navigation }) => {
 
       if (itemError) throw itemError;
 
-      // 6. SUKSES! Siapkan data untuk layar berikutnya
-      // (PERBAIKAN: Kirim 'orderId' saja, sesuai logika baru kita)
+      // (PERBAIKAN) Navigasi ke TransferDetails
       navigation.replace('TransferDetails', {
         orderId: newOrder.id,
       });
@@ -187,8 +217,9 @@ const CheckoutScreen = ({ route, navigation }) => {
       setPlacingOrder(false);
     }
   };
+  // --- (BATAS MODIFIKASI) ---
 
-  // --- 10. Validasi Data Awal ---
+  // --- (Render Loading & Error) ---
   if (loadingProfile) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -210,19 +241,10 @@ const CheckoutScreen = ({ route, navigation }) => {
     );
   }
 
-  // Jika produk tidak ada (error navigasi)
   if (!cartItems || cartItems.length === 0) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.headerButton}
-          >
-            <Text style={styles.headerBackText}>{'<'}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* ... (Tampilan Error Keranjang Kosong, Tidak Berubah) ... */}
         <InfoModal
           isVisible={true}
           onClose={() => navigation.goBack()}
@@ -253,7 +275,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Kartu Penerima (Data dari Profil) */}
+        {/* Kartu Penerima (Tidak Berubah) */}
         <InfoCardRow
           title="Penerima"
           value={`${profile?.full_name || '...'} (${
@@ -262,7 +284,7 @@ const CheckoutScreen = ({ route, navigation }) => {
           valueStyle={styles.addressText}
         />
 
-        {/* (INI PERBAIKAN) Kartu Alamat (Jadi TextInput) */}
+        {/* Kartu Alamat (Tidak Berubah) */}
         <View style={[styles.card, styles.addressCard]}>
           <Text style={styles.cardTitle}>Alamat Pengiriman</Text>
           <TextInput
@@ -274,9 +296,8 @@ const CheckoutScreen = ({ route, navigation }) => {
             multiline
           />
         </View>
-        {/* (BATAS PERBAIKAN) */}
 
-        {/* (INI PERBAIKAN) Kartu Produk (Looping) */}
+        {/* Kartu Produk (Tidak Berubah) */}
         {cartItems.map((item, index) => {
           const imageSource = item.image_url
             ? { uri: item.image_url }
@@ -305,13 +326,9 @@ const CheckoutScreen = ({ route, navigation }) => {
             </View>
           );
         })}
-        {/* (BATAS PERBAIKAN) */}
 
-        {/* --- HAPUS: Kartu Opsi Pengiriman --- */}
-
-        {/* Kartu Pesan */}
-        <View style={[styles.card, styles.row]}>
-          <Text style={styles.cardTitle}>Pesan</Text>
+        {/* Kartu Pesan (Tidak Berubah) */}
+        <InfoCardRow title="Pesan">
           <TextInput
             placeholder="Tinggalkan pesan......"
             style={styles.messageInput}
@@ -319,9 +336,9 @@ const CheckoutScreen = ({ route, navigation }) => {
             value={message}
             onChangeText={setMessage}
           />
-        </View>
+        </InfoCardRow>
 
-        {/* (INI FITUR BARU) Kartu Diskon Poin */}
+        {/* Kartu Diskon Poin (Tidak Berubah) */}
         <View style={[styles.card, styles.row]}>
           <View>
             <Text style={styles.cardTitle}>Gunakan Poin</Text>
@@ -337,9 +354,53 @@ const CheckoutScreen = ({ route, navigation }) => {
             disabled={userPoints === 0}
           />
         </View>
-        {/* (BATAS FITUR BARU) */}
 
-        {/* Ringkasan Pembayaran */}
+        {/* --- (PERBAIKAN BESAR) Kartu Metode Pembayaran --- */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Metode Pembayaran</Text>
+          {loadingPayments ? (
+            <ActivityIndicator style={{ marginVertical: 10 }} color="#6A453C" />
+          ) : (
+            <View>
+              {paymentMethods.length === 0 ? (
+                <Text style={styles.paymentErrorText}>
+                  Saat ini tidak ada metode pembayaran yang aktif.
+                </Text>
+              ) : (
+                paymentMethods.map(method => {
+                  const isSelected = selectedPayment?.id === method.id;
+                  return (
+                    <TouchableOpacity
+                      key={method.id}
+                      style={[
+                        styles.paymentOption,
+                        isSelected && styles.paymentOptionSelected,
+                      ]}
+                      onPress={() => setSelectedPayment(method)}
+                    >
+                      <View style={styles.paymentRadio}>
+                        {isSelected && (
+                          <View style={styles.paymentRadioInner} />
+                        )}
+                      </View>
+                      <View>
+                        <Text style={styles.paymentBankName}>
+                          {method.bank_name}
+                        </Text>
+                        <Text style={styles.paymentAccountName}>
+                          a.n {method.account_name}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+          )}
+        </View>
+        {/* --- (BATAS PERBAIKAN) --- */}
+
+        {/* Ringkasan Pembayaran (Tidak Berubah) */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Ringkasan Pembayaran</Text>
           <View style={styles.itemRow}>
@@ -348,7 +409,6 @@ const CheckoutScreen = ({ route, navigation }) => {
             </Text>
             <Text style={styles.itemValue}>{formatCurrency(totalOrder)}</Text>
           </View>
-          {/* (PERBAIKAN) Hapus 'shippingCost' */}
           <View style={styles.itemRow}>
             <Text style={styles.itemLabel}>Diskon Poin</Text>
             <Text style={[styles.itemValue, styles.discountText]}>
@@ -363,25 +423,22 @@ const CheckoutScreen = ({ route, navigation }) => {
             </Text>
           </View>
         </View>
-
-        {/* Kartu Metode Pembayaran (Sederhana) */}
-        <InfoCardRow
-          title="Metode Pembayaran"
-          value={selectedPayment.name}
-          valueStyle={styles.paymentMethodSelectedText}
-        />
       </ScrollView>
 
-      {/* Footer Pembayaran */}
+      {/* Footer Pembayaran (Tidak Berubah) */}
       <View style={styles.footer}>
         <View style={styles.footerTextContainer}>
           <Text style={styles.footerLabel}>Total Pembayaran</Text>
           <Text style={styles.footerPrice}>{formatCurrency(totalPayment)}</Text>
         </View>
         <TouchableOpacity
-          style={styles.orderButton}
+          style={[
+            styles.orderButton,
+            // (PERBAIKAN) Nonaktifkan jika loading ATAU bank belum dipilih
+            (placingOrder || !selectedPayment) && styles.orderButtonDisabled,
+          ]}
           onPress={handlePlaceOrder}
-          disabled={placingOrder}
+          disabled={placingOrder || !selectedPayment}
         >
           {placingOrder ? (
             <ActivityIndicator color="#6A453C" />
@@ -402,7 +459,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   );
 };
 
-// --- (INI STYLE BARU) ---
+// --- (STYLE BARU DITAMBAHKAN) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8F8F8' },
   header: {
@@ -491,9 +548,8 @@ const styles = StyleSheet.create({
     color: '#555',
     lineHeight: 20,
   },
-  // (STYLE BARU) Alamat
   addressCard: {
-    paddingVertical: 12, // Padding lebih kecil
+    paddingVertical: 12,
   },
   addressInput: {
     fontSize: 14,
@@ -501,15 +557,13 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 0,
     textAlignVertical: 'top',
-    minHeight: 60, // Tinggi minimal
+    minHeight: 60,
   },
-  // (STYLE BARU) Poin
   pointsAvailable: {
     fontSize: 12,
     color: '#888',
     marginTop: 2,
   },
-  // (STYLE BARU) Ringkasan
   itemLabel: {
     fontSize: 15,
     color: '#555',
@@ -520,7 +574,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   discountText: {
-    color: '#2E7D32', // Hijau
+    color: '#2E7D32',
     fontWeight: 'bold',
   },
   separator: {
@@ -538,7 +592,6 @@ const styles = StyleSheet.create({
     color: '#6A453C',
     fontWeight: 'bold',
   },
-  // (BATAS STYLE BARU)
   messageInput: {
     flex: 1,
     textAlign: 'right',
@@ -547,11 +600,54 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     paddingVertical: 0,
   },
-  paymentMethodSelectedText: {
+  // --- (STYLE BARU UNTUK LIST PEMBAYARAN) ---
+  paymentErrorText: {
     fontSize: 14,
-    fontWeight: '500',
+    color: '#D32F2F',
+    textAlign: 'center',
+    marginVertical: 10,
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 10,
+  },
+  paymentOptionSelected: {
+    borderColor: '#6A453C',
+    backgroundColor: '#F8F5F1',
+  },
+  paymentRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#6A453C',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  paymentRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#6A453C',
+  },
+  paymentBankName: {
+    fontSize: 15,
+    fontWeight: 'bold',
     color: '#333',
   },
+  paymentAccountName: {
+    fontSize: 13,
+    color: '#777',
+    marginTop: 2,
+  },
+  // ---
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -589,6 +685,10 @@ const styles = StyleSheet.create({
     minWidth: 140,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // (STYLE BARU)
+  orderButtonDisabled: {
+    backgroundColor: '#E0E0E0',
   },
   orderButtonText: {
     color: '#6A453C',

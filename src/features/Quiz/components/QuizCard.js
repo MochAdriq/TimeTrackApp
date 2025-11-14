@@ -2,37 +2,35 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 
-// --- Impor Aset (Ganti path) ---
-// const quizThumbnail = require('../../../assets/images/quiz_thumb_default.png');
-// const starIcon = require('../../../assets/icons/StarIcon.svg'); // Asumsi pakai SVG
-// const clockIcon = require('../../../assets/icons/ClockIcon.svg');
-// const fileIcon = require('../../../assets/icons/FileIcon.svg');
-
 const dummyImageSource = require('../../../assets/images/dummyImage.png');
 
 const QuizCard = ({ item, onPress }) => {
+  // --- (PERBAIKAN 1) Ambil 'isCompleted' ---
+  const { isCompleted } = item;
+
   return (
-    <TouchableOpacity style={styles.card} onPress={() => onPress(item)}>
-      {/* Thumbnail */}
+    <TouchableOpacity
+      // --- (PERBAIKAN 2) Terapkan style & disable ---
+      style={[styles.card, isCompleted && styles.cardDisabled]}
+      onPress={() => onPress(item)}
+      disabled={isCompleted} // <<< Buat tombol non-aktif
+    >
       <Image
-        source={dummyImageSource} // <<< Gunakan require() di prop 'source'
+        source={dummyImageSource}
         style={styles.thumbnail}
-        resizeMode="cover" // Tambahkan resizeMode (opsional tapi bagus)
+        resizeMode="cover"
       />
-      {/* Info Kuis */}
       <View style={styles.infoContainer}>
         <Text style={styles.title} numberOfLines={1}>
           {item.title}
         </Text>
         <View style={styles.detailRow}>
-          {/* Ganti View dengan ikon */}
           <View style={styles.iconPlaceholder}>
             <Text style={{ fontSize: 10 }}>📄</Text>
           </View>
           <Text style={styles.detailText}>{item.questionCount} Questions</Text>
         </View>
         <View style={styles.detailRow}>
-          {/* Ganti View dengan ikon */}
           <View style={styles.iconPlaceholder}>
             <Text style={{ fontSize: 10 }}>🕒</Text>
           </View>
@@ -40,18 +38,25 @@ const QuizCard = ({ item, onPress }) => {
         </View>
       </View>
 
-      {/* Rating */}
-      <View style={styles.ratingContainer}>
-        {/* Ganti View dengan ikon bintang */}
-        <View style={styles.starPlaceholder}>
-          <Text style={{ color: '#FFC107' }}>★</Text>
+      {/* --- (PERBAIKAN 3) Tampilkan Rating ATAU Badge Selesai --- */}
+      {isCompleted ? (
+        <View style={styles.completedBadge}>
+          <Text style={styles.completedText}>SELESAI</Text>
         </View>
-        <Text style={styles.ratingText}>{item.rating}</Text>
-      </View>
+      ) : (
+        <View style={styles.ratingContainer}>
+          <View style={styles.starPlaceholder}>
+            <Text style={{ color: '#FFC107' }}>★</Text>
+          </View>
+          <Text style={styles.ratingText}>{item.rating}</Text>
+        </View>
+      )}
+      {/* --- (BATAS PERBAIKAN 3) --- */}
     </TouchableOpacity>
   );
 };
 
+// --- (PERBAIKAN 4) Tambahkan style baru ---
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
@@ -60,15 +65,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 12,
     marginBottom: 15,
-    // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 5,
     elevation: 3,
   },
+  cardDisabled: {
+    backgroundColor: '#F0F0F0', // Abu-abu
+    opacity: 0.7, // Redupkan
+  },
   thumbnail: {
-    // Ganti jika pakai placeholder
     width: 70,
     height: 70,
     borderRadius: 15,
@@ -76,7 +83,7 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   infoContainer: {
-    flex: 1, // Ambil sisa ruang
+    flex: 1,
     marginRight: 10,
   },
   title: {
@@ -91,7 +98,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   iconPlaceholder: {
-    // Ganti dengan style ikon
     width: 14,
     height: 14,
     marginRight: 6,
@@ -105,16 +111,27 @@ const styles = StyleSheet.create({
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 5, // Sedikit padding
+    padding: 5,
   },
   starPlaceholder: {
-    // Ganti dengan style ikon bintang
     marginRight: 4,
   },
   ratingText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#555',
+  },
+  // --- Style untuk Badge Selesai ---
+  completedBadge: {
+    backgroundColor: '#4CAF50', // Hijau
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  completedText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
 

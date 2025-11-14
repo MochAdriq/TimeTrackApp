@@ -40,7 +40,7 @@ const ContentCard = ({
       <Image source={imageSource} style={styles.image} />
 
       {/* --- 4. Tombol Hati (Absolute Position) --- */}
-      <TouchableOpacity
+      {/* <TouchableOpacity
         style={styles.favoriteButton}
         onPress={handleFavoritePress}
       >
@@ -49,7 +49,7 @@ const ContentCard = ({
         ) : (
           <LoveIconInactive width={24} height={24} />
         )}
-      </TouchableOpacity>
+      </TouchableOpacity> */}
 
       <View style={styles.textContainer}>
         <Text style={styles.category} numberOfLines={1}>

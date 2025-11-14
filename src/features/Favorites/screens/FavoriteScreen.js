@@ -1,6 +1,4 @@
 // src/features/Favorites/screens/FavoriteScreen.js
-
-// --- MODIFIKASI 1: Import useMemo dan SearchBar ---
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
@@ -10,6 +8,7 @@ import {
   View,
   Text,
   ActivityIndicator,
+  RefreshControl, // <<< 1. Import RefreshControl
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../services/supabaseClient';
@@ -17,11 +16,8 @@ import InfoModal from '../../../components/common/InfoModal';
 import FavoriteItem from '../components/FavoriteItem';
 import FavoriteHeader from '../components/FavoriteHeader';
 import FavoriteInfo from '../components/FavoriteInfo';
-// Import SearchBar dari folder Home
 import SearchBar from '../../Home/components/SearchBar';
 
-// --- MODIFIKASI 2: Pindahkan logika filter ke LUAR komponen ---
-// Ini adalah "pure function" dan memperbaiki error ESLint "exhaustive-deps".
 const filterMateri = (data, query) => {
   if (!query) {
     return data;
@@ -31,57 +27,68 @@ const filterMateri = (data, query) => {
 };
 
 const FavoriteScreen = ({ navigation }) => {
-  // --- State (favorites, profile, loading, modalInfo) tetap sama ---
-  const [favorites, setFavorites] = useState([]); // Ini adalah master list
+  const [favorites, setFavorites] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalInfo, setModalInfo] = useState({ visible: false, message: '' });
-
-  // --- MODIFIKASI 3: Tambahkan state untuk search ---
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false); // <<< 2. Tambah state refreshing
 
-  // --- useFocusEffect (Tidak diubah) ---
+  // --- (PERBAIKAN) Ekstrak fetchData ---
+  const fetchData = useCallback(async (isRefresh = false) => {
+    // Hanya tampilkan loader fullscreen jika BUKAN refresh
+    if (!isRefresh) {
+      setLoading(true);
+    }
+
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) throw authError || new Error('User not found');
+
+      const [favoritesResponse, profileResponse] = await Promise.all([
+        supabase
+          .from('user_favorites')
+          .select('materi ( *, categories ( name ) )')
+          .eq('user_id', user.id),
+        supabase
+          .from('profiles')
+          .select('full_name, level, points')
+          .eq('id', user.id)
+          .single(),
+      ]);
+
+      if (favoritesResponse.error) throw favoritesResponse.error;
+      if (profileResponse.error) throw profileResponse.error;
+
+      setFavorites(favoritesResponse.data.map(fav => fav.materi));
+      setProfile(profileResponse.data);
+    } catch (error) {
+      setModalInfo({ visible: true, message: error.message });
+    } finally {
+      // Selalu matikan kedua loader
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []); // <<< 3. Tambahkan dependency array kosong
+  // --- (BATAS PERBAIKAN) ---
+
+  // --- (PERBAIKAN) Panggil fetchData dengan benar ---
   useFocusEffect(
     useCallback(() => {
-      const fetchData = async () => {
-        setLoading(true);
-        try {
-          // ... (Logika fetch data Anda sudah benar) ...
-          const {
-            data: { user },
-            error: authError,
-          } = await supabase.auth.getUser();
-          if (authError || !user)
-            throw authError || new Error('User not found');
-
-          const [favoritesResponse, profileResponse] = await Promise.all([
-            supabase
-              .from('user_favorites')
-              .select('materi ( *, categories ( name ) )')
-              .eq('user_id', user.id),
-            supabase
-              .from('profiles')
-              .select('full_name, level, points')
-              .eq('id', user.id)
-              .single(),
-          ]);
-
-          if (favoritesResponse.error) throw favoritesResponse.error;
-          if (profileResponse.error) throw profileResponse.error;
-
-          setFavorites(favoritesResponse.data.map(fav => fav.materi));
-          setProfile(profileResponse.data);
-        } catch (error) {
-          setModalInfo({ visible: true, message: error.message });
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchData();
-    }, []),
+      fetchData(false); // 'false' berarti ini loading awal
+    }, [fetchData]), // <<< 4. Tambahkan fetchData sebagai dependency
   );
 
-  // --- handleItemPress (Tidak diubah, sudah benar navigasi ke MateriDetail) ---
+  // --- (FITUR BARU) Fungsi onRefresh ---
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchData(true); // 'true' berarti ini adalah refresh
+  }, [fetchData]); // <<< 5. Tambahkan fetchData sebagai dependency
+  // ---
+
   const handleItemPress = item => {
     navigation.navigate('MateriDetail', {
       materiId: item.id,
@@ -89,7 +96,6 @@ const FavoriteScreen = ({ navigation }) => {
     });
   };
 
-  // --- MODIFIKASI 4: Buat state turunan untuk data yang difilter ---
   const filteredFavorites = useMemo(
     () => filterMateri(favorites, searchQuery),
     [searchQuery, favorites],
@@ -99,7 +105,6 @@ const FavoriteScreen = ({ navigation }) => {
     <FavoriteItem item={item} onPress={() => handleItemPress(item)} />
   );
 
-  // --- MODIFIKASI 5: Buat ListEmptyComponent lebih dinamis ---
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyText}>
@@ -113,8 +118,9 @@ const FavoriteScreen = ({ navigation }) => {
     </View>
   );
 
-  // --- Tampilan Loading (Tidak diubah) ---
-  if (loading && !profile) {
+  // --- (PERBAIKAN) Logika Loading ---
+  // Tampilkan loader HANYA jika loading awal, BUKAN saat refresh
+  if (loading && !profile && !refreshing) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -131,9 +137,9 @@ const FavoriteScreen = ({ navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <FavoriteHeader navigation={navigation} title="Favorit Saya" />
 
-      {/* MODIFIKASI 6: Update FlatList */}
+      {/* --- (PERBAIKAN) Tambahkan RefreshControl ke FlatList --- */}
       <FlatList
-        data={filteredFavorites} // <-- Gunakan data yang difilter
+        data={filteredFavorites}
         renderItem={renderItem}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
@@ -144,7 +150,6 @@ const FavoriteScreen = ({ navigation }) => {
               level={profile?.level || 1}
               points={profile?.points || 0}
             />
-            {/* Tambahkan SearchBar di sini */}
             <View style={styles.searchBarWrapper}>
               <SearchBar
                 searchQuery={searchQuery}
@@ -154,7 +159,18 @@ const FavoriteScreen = ({ navigation }) => {
           </>
         }
         ListEmptyComponent={renderEmptyList}
+        // --- (INI KODENYA) ---
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#6A453C']} // Warna spinner (Android)
+            tintColor={'#6A453C'} // Warna spinner (iOS)
+          />
+        }
+        // ---
       />
+      {/* --- (BATAS PERBAIKAN) --- */}
 
       <InfoModal
         visible={modalInfo.visible}
@@ -167,7 +183,7 @@ const FavoriteScreen = ({ navigation }) => {
   );
 };
 
-// --- MODIFIKASI 7: Tambahkan style untuk searchBarWrapper ---
+// --- (STYLES tidak berubah) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -176,6 +192,7 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingHorizontal: 15,
     paddingBottom: 20,
+    flexGrow: 1, // <<< Pastikan ini ada agar refresh control jalan walau list kosong
   },
   loadingContainer: {
     flex: 1,
@@ -199,8 +216,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   searchBarWrapper: {
-    marginTop: 10, // Beri jarak dari FavoriteInfo
-    marginBottom: 10, // Beri jarak ke item pertama
+    marginTop: 10,
+    marginBottom: 10,
   },
 });
 

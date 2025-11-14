@@ -24,6 +24,8 @@ import InfoModal from '../../../components/common/InfoModal';
 import { useProfile } from '../../../context/ProfileContext';
 import { supabase } from '../../../services/supabaseClient';
 
+import HelpIcon from '../../../assets/icon/HelpIcon.svg';
+
 // --- Komponen Aksi (ActionItem) ---
 const ActionItem = ({ icon, label, onPress, isLast, isLogout }) => (
   <TouchableOpacity

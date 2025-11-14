@@ -1,5 +1,5 @@
 // src/features/Quiz/screens/QuizListScreen.js
-import React, { useState, useCallback } from 'react'; // <<< 1. Import useState & useCallback
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,20 +10,15 @@ import {
   TouchableOpacity,
   Image,
   FlatList,
-  ActivityIndicator, // <<< 2. Import ActivityIndicator
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native'; // <<< 3. Import useFocusEffect
-import QuizCard from '../components/QuizCard'; // Import kartu kuis
+import { useFocusEffect } from '@react-navigation/native';
+import QuizCard from '../components/QuizCard';
 
-// --- 4. Import Supabase ---
 import { supabase } from '../../../services/supabaseClient';
 
-// --- Hapus Data Dummy ---
-// const userQuizData = { ... };
-// const quizListData = [ ... ];
-
 const QuizListScreen = ({ navigation }) => {
-  // --- 5. Tambahkan State ---
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState({
     name: 'Memuat...',
@@ -31,12 +26,15 @@ const QuizListScreen = ({ navigation }) => {
     points: 0,
   });
   const [quizList, setQuizList] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // --- 6. Fungsi Fetch Data ---
-  const fetchData = async () => {
-    setLoading(true);
+  // --- (PERBAIKAN) Modifikasi fetchData ---
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) {
+      setLoading(true);
+    }
+
     try {
-      // 1. Ambil ID user yang login
       const {
         data: { user },
         error: userError,
@@ -44,17 +42,23 @@ const QuizListScreen = ({ navigation }) => {
       if (userError) throw userError;
       if (!user) throw new Error('User tidak ditemukan.');
 
-      // 2. Ambil data profil & daftar kuis sekaligus
-      const [profileResult, quizResult] = await Promise.all([
+      // --- (INI PERBAIKANNYA) Ambil 3 data sekaligus ---
+      const [profileResult, quizResult, attemptsResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('username, level, points')
           .eq('id', user.id)
           .single(),
-        supabase.from('quizzes').select('*'), // Ambil semua kuis
+        supabase.from('quizzes').select('*'),
+        // 3. Ambil riwayat kuis yang sudah diambil
+        supabase
+          .from('quiz_attempts')
+          .select('quiz_id') // Hanya butuh ID kuisnya
+          .eq('user_id', user.id),
       ]);
+      // --- (BATAS PERBAIKAN) ---
 
-      // 3. Proses data profil
+      // 1. Proses Profil (Tidak berubah)
       if (profileResult.error && profileResult.error.code !== 'PGRST116') {
         throw profileResult.error;
       }
@@ -66,10 +70,16 @@ const QuizListScreen = ({ navigation }) => {
         });
       }
 
-      // 4. Proses data kuis
+      // 2. Proses Daftar Kuis & Riwayat
       if (quizResult.error) throw quizResult.error;
+      if (attemptsResult.error) throw attemptsResult.error;
 
-      // Format data agar sesuai QuizCard (berdasarkan dummy)
+      // Buat Set (lookup cepat) dari kuis yang sudah selesai
+      const completedQuizIds = new Set(
+        attemptsResult.data.map(att => att.quiz_id),
+      );
+
+      // Format data dan tambahkan 'isCompleted'
       const formattedQuizzes = quizResult.data.map(quiz => ({
         id: quiz.id,
         title: quiz.title,
@@ -77,27 +87,35 @@ const QuizListScreen = ({ navigation }) => {
         duration: quiz.duration,
         rating: quiz.rating,
         imageUrl: quiz.image_url,
+        isCompleted: completedQuizIds.has(quiz.id), // <<< KUNCI LOGIKA
       }));
+
       setQuizList(formattedQuizzes);
     } catch (error) {
       console.error('Error fetching quiz list data:', error.message);
-      // Nanti bisa ganti pakai InfoModal
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
+  // --- (BATAS PERBAIKAN) ---
 
-  // --- 7. Gunakan useFocusEffect ---
-  // Akan refresh data setiap kali layar ini dibuka
   useFocusEffect(
     useCallback(() => {
-      fetchData();
-    }, []),
+      fetchData(false);
+    }, [fetchData]),
   );
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchData(true);
+  }, [fetchData]);
+
   const handleQuizSelect = quizItem => {
+    // (PERBAIKAN) Jangan navigasi jika sudah selesai
+    if (quizItem.isCompleted) return;
+
     console.log('Selected Quiz:', quizItem.id);
-    // Kirim 'quizItem' (yang sudah diformat) ke QuizDetail
     navigation.navigate('QuizDetail', { quizItem: quizItem });
   };
 
@@ -105,8 +123,7 @@ const QuizListScreen = ({ navigation }) => {
     <QuizCard item={item} onPress={handleQuizSelect} />
   );
 
-  // --- 8. Tampilkan Loading Penuh ---
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.loadingContainer]}>
         <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
@@ -118,8 +135,8 @@ const QuizListScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-      {/* --- Bagian Atas (Curve Coklat & Profil) --- */}
       <View style={styles.topSection}>
+        {/* ... (Kode Bagian Atas tidak berubah) ... */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -128,15 +145,11 @@ const QuizListScreen = ({ navigation }) => {
             <Text style={{ color: '#fff', fontSize: 20 }}>{'<'}</Text>
           </View>
         </TouchableOpacity>
-
-        {/* Foto Profil (Overlap) */}
         <View style={styles.profilePicWrapper}>
           <View style={styles.profilePicPlaceholder}>
             <Text style={{ fontSize: 30 }}>👤</Text>
           </View>
         </View>
-
-        {/* --- 9. Gunakan Data Dinamis --- */}
         <View style={styles.profileInfo}>
           <Text style={styles.profileName}>Hi, {userProfile.name}</Text>
           <Text style={styles.profileSubtext}>Good Morning</Text>
@@ -153,11 +166,9 @@ const QuizListScreen = ({ navigation }) => {
           </View>
         </View>
       </View>
-      {/* --- Akhir Bagian Atas --- */}
 
-      {/* --- Daftar Kuis (Area Putih Melengkung) --- */}
       <FlatList
-        data={quizList} // <<< Gunakan data dari state
+        data={quizList}
         renderItem={renderItem}
         keyExtractor={item => item.id.toString()}
         style={styles.listArea}
@@ -165,38 +176,46 @@ const QuizListScreen = ({ navigation }) => {
         ListEmptyComponent={
           <Text style={styles.emptyText}>Belum ada kuis yang tersedia.</Text>
         }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#6A453C']}
+            tintColor={'#6A453C'}
+          />
+        }
+        // (PERBAIKAN) Pastikan list update saat data berubah
+        extraData={quizList}
       />
     </SafeAreaView>
   );
 };
 
-// --- STYLES (Tambahkan style loading & empty) ---
+// --- (STYLES tidak berubah) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#F4F4F4',
   },
   loadingContainer: {
-    // Style untuk loading
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Bagian Atas
   topSection: {
     backgroundColor: '#6A453C',
     paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 25,
-    paddingBottom: 40, // Beri jarak lebih untuk foto profil
+    paddingBottom: 40,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     zIndex: 1,
-    alignItems: 'center', // Pusatkan semua
+    alignItems: 'center',
   },
   backButton: {
     padding: 5,
     alignSelf: 'flex-start',
-    position: 'absolute', // Taruh di pojok
+    position: 'absolute',
     left: 15,
     top: StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 25,
     zIndex: 10,
@@ -208,8 +227,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profileInfo: {
-    alignItems: 'center', // Pusatkan info profil
-    marginTop: 10, // Jarak dari foto
+    alignItems: 'center',
+    marginTop: 10,
   },
   profileName: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
   profileSubtext: { color: '#E0E0E0', fontSize: 12 },
@@ -221,7 +240,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginTop: 8,
-    alignSelf: 'center', // Pusatkan
+    alignSelf: 'center',
   },
   levelText: {
     color: '#FFFFFF',
@@ -252,8 +271,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profilePicWrapper: {
-    // Foto profil sekarang di atas info
-    marginTop: 20, // Beri jarak dari tombol back
+    marginTop: 20,
   },
   profilePicPlaceholder: {
     width: 70,
@@ -265,22 +283,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Bagian List Putih
   listArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    marginTop: -20, // Tarik ke atas
+    marginTop: -20,
     zIndex: 0,
   },
   listContent: {
     padding: 20,
     paddingTop: 30,
+    flexGrow: 1,
   },
   emptyText: {
-    // Style jika list kuis kosong
     fontSize: 16,
     color: '#888',
     textAlign: 'center',
