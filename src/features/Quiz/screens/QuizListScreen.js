@@ -139,7 +139,12 @@ const QuizListScreen = ({ navigation }) => {
         {/* ... (Kode Bagian Atas tidak berubah) ... */}
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() =>
+            navigation.navigate('MainApp', {
+              screen: 'MainTabs',
+              params: { screen: 'Jelajah' },
+            })
+          }
         >
           <View style={styles.backIconPlaceholder}>
             <Text style={{ color: '#fff', fontSize: 20 }}>{'<'}</Text>
@@ -151,7 +156,7 @@ const QuizListScreen = ({ navigation }) => {
           </View>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>Hi, {userProfile.name}</Text>
+          <Text style={styles.profileName}>H, {userProfile.name}</Text>
           <Text style={styles.profileSubtext}>Good Morning</Text>
           <View style={styles.levelContainer}>
             <Text style={styles.levelText}>Level {userProfile.level}</Text>

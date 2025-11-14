@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 // src/features/Materi/screens/MateriScreen.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -11,16 +12,16 @@ import {
   Image,
   ActivityIndicator,
   Platform,
-  Modal,
 } from 'react-native';
+import Modal from 'react-native-modal';
 import Tts from 'react-native-tts';
-import Video from 'react-native-video'; // <<< HANYA import Video
-// --- HAPUS: WebView ---
+import Video from 'react-native-video';
 import { supabase } from '../../../services/supabaseClient';
-import InfoModal from '../../../components/common/InfoModal';
+import InfoModal from '../../../components/common/InfoModal'; // Pastikan path ini benar
 import LoveIconActive from '../../../assets/icon/LoveIconActive.svg';
 import LoveIconInactive from '../../../assets/icon/LoveIconInactive.svg';
 import { updateTaskProgress } from '../../../services/taskService';
+import { useProfile } from '../../../context/ProfileContext';
 
 const MIN_TIME_SPENT_MS = 10000;
 
@@ -30,9 +31,6 @@ if (Platform.OS === 'android') {
   Tts.setDefaultPitch(1.0);
 }
 
-// --- HAPUS: Fungsi getYoutubeEmbedUrl ---
-// --- HAPUS: Fungsi isYouTubeLink ---
-
 const MateriScreen = ({ route, navigation }) => {
   const { materiId } = route.params;
 
@@ -40,7 +38,7 @@ const MateriScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [modalInfo, setModalInfo] = useState({
-    visible: false,
+    visible: false, // State di sini namanya 'visible'
     type: 'error',
     title: '',
     message: '',
@@ -61,11 +59,15 @@ const MateriScreen = ({ route, navigation }) => {
   const timerRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // --- (PERBAIKAN) Hanya satu state modal video ---
-  const [isVideoModalVisible, setIsVideoModalVisible] = useState(false);
-  // ---
+  const { profile } = useProfile();
+  const isPremium = profile?.plan === 'premium';
 
-  // ... (fetchMateriData tidak berubah) ...
+  console.log('--- STATUS PREMIUM CHECK ---');
+  console.log('isPremium:', isPremium);
+  console.log('Profile Plan:', profile?.plan);
+
+  const [isVideoModalVisible, setIsVideoModalVisible] = useState(false);
+
   const fetchMateriData = useCallback(async () => {
     setLoading(true);
     try {
@@ -77,10 +79,10 @@ const MateriScreen = ({ route, navigation }) => {
         .from('materi')
         .select(
           `
-          *,
-          categories ( name ),
-          user_favorites ( count )
-        `,
+*,
+categories ( name ),
+user_favorites ( count )
+`,
         )
         .eq('id', materiId)
         .single();
@@ -120,7 +122,6 @@ const MateriScreen = ({ route, navigation }) => {
     }
   }, [materiId, fetchMateriData]);
 
-  // ... (tryCompleteTask tidak berubah) ...
   const tryCompleteTask = useCallback(
     async triggerSource => {
       if (hasTaskBeenTriggered) {
@@ -165,7 +166,6 @@ const MateriScreen = ({ route, navigation }) => {
     ],
   );
 
-  // ... (useEffect Timer tidak berubah) ...
   useEffect(() => {
     if (!loading && materi) {
       console.log('MateriScreen: Timer dimulai...');
@@ -185,7 +185,6 @@ const MateriScreen = ({ route, navigation }) => {
     };
   }, [loading, materi, tryCompleteTask]);
 
-  // ... (useEffect TTS tidak berubah) ...
   useEffect(() => {
     const onStart = () => setIsSpeaking(true);
     const onFinish = () => setIsSpeaking(false);
@@ -209,7 +208,6 @@ const MateriScreen = ({ route, navigation }) => {
     };
   }, []);
 
-  // ... (handleLike tidak berubah) ...
   const handleLike = async () => {
     const {
       data: { user },
@@ -248,21 +246,53 @@ const MateriScreen = ({ route, navigation }) => {
         message: 'Gagal memperbarui status favorit. Coba lagi.',
       });
     }
-  };
+  }; // --- FUNGSI INI DIRAPIKAN DARI SISA DEBUG ---
 
-  // --- (PERBAIKAN) Logika handlePlayVideo (disederhanakan) ---
   const handlePlayVideo = () => {
+    // --- START: PREMIUM GATE ---
+    if (!isPremium) {
+      console.log('Membuka modal premium untuk VIDEO...');
+      setModalInfo({
+        visible: true,
+        type: 'info', // Tipe info (biru)
+        title: 'Fitur Premium',
+        message:
+          'Video materi eksklusif hanya untuk pengguna Premium. Upgrade sekarang?',
+        confirmText: 'Upgrade',
+        onConfirm: () => {
+          setModalInfo(prev => ({ ...prev, visible: false }));
+          navigation.navigate('Premium'); // Arahkan ke tab Premium
+        },
+      });
+      return; // Hentikan aksi
+    } // --- END: PREMIUM GATE ---
+    console.log('User premium, membuka video player...');
     const url = materi?.video_url;
     if (url) {
       setIsVideoModalVisible(true);
     } else {
       console.log('Tidak ada video url');
     }
-  };
-  // ---
-
-  // ... (handlePlayAudio tidak berubah) ...
+  }; // ---
   const handlePlayAudio = () => {
+    // --- START: PREMIUM GATE ---
+    if (!isPremium) {
+      console.log('Membuka modal premium untuk AUDIO...');
+      setModalInfo({
+        visible: true,
+        type: 'info',
+        title: 'Fitur Premium',
+        message:
+          'Fitur Suara AI hanya untuk pengguna Premium. Upgrade sekarang?',
+        confirmText: 'Upgrade',
+        onConfirm: () => {
+          setModalInfo(prev => ({ ...prev, visible: false }));
+          navigation.navigate('Premium');
+        },
+      });
+      return;
+    } // --- END: PREMIUM GATE ---
+    console.log('User premium, memutar audio...');
     if (isSpeaking) {
       Tts.stop();
     } else {
@@ -278,7 +308,6 @@ const MateriScreen = ({ route, navigation }) => {
     setModalInfo(prev => ({ ...prev, visible: false }));
   };
 
-  // ... (handleScroll tidak berubah) ...
   const handleScroll = event => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
     const isCloseToBottom =
@@ -290,7 +319,6 @@ const MateriScreen = ({ route, navigation }) => {
     }
   };
 
-  // ... (Render Loading & Error tidak berubah) ...
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -327,11 +355,13 @@ const MateriScreen = ({ route, navigation }) => {
           </Text>
         </View>
         <InfoModal
-          visible={modalInfo.visible}
+          isVisible={modalInfo.visible} // Ganti 'visible' menjadi 'isVisible'
           title={modalInfo.title}
           message={modalInfo.message}
           type={modalInfo.type}
           onClose={closeModal}
+          confirmText={modalInfo.confirmText}
+          onConfirm={modalInfo.onConfirm}
         />
       </SafeAreaView>
     );
@@ -343,13 +373,11 @@ const MateriScreen = ({ route, navigation }) => {
     ? { uri: video_thumbnail_url }
     : null;
 
-  // --- HAPUS: Logika isLinkYouTube ---
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
+
       <View style={styles.header}>
-        {/* ... (Header tidak berubah) ... */}
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
@@ -358,6 +386,7 @@ const MateriScreen = ({ route, navigation }) => {
             <Text style={{ color: '#fff', fontSize: 20 }}>{'<'}</Text>
           </View>
         </TouchableOpacity>
+
         <Text style={styles.headerTitle} numberOfLines={1}>
           {title}
         </Text>
@@ -369,7 +398,6 @@ const MateriScreen = ({ route, navigation }) => {
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
-        {/* ... (Image, Like, Title tidak berubah) ... */}
         {imageSource && (
           <View style={styles.imageContainer}>
             <Image
@@ -377,6 +405,7 @@ const MateriScreen = ({ route, navigation }) => {
               style={styles.mainImage}
               resizeMode="cover"
             />
+
             <TouchableOpacity style={styles.likeButton} onPress={handleLike}>
               {isFavorite ? (
                 <LoveIconActive width={22} height={22} />
@@ -386,12 +415,10 @@ const MateriScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           </View>
         )}
-
         <Text style={styles.contentTitle}>{title}</Text>
-
-        {/* ... (Video Thumbnail tidak berubah) ... */}
         {videoThumbSource && (
           <TouchableOpacity
+            _
             style={styles.videoContainer}
             onPress={handlePlayVideo}
             activeOpacity={0.8}
@@ -401,6 +428,7 @@ const MateriScreen = ({ route, navigation }) => {
               style={styles.videoThumbnail}
               resizeMode="cover"
             />
+
             <View style={styles.playIconOverlay}>
               <View style={styles.playIconPlaceholder}>
                 <Text style={{ fontSize: 30, color: 'rgba(255,255,255,0.8)' }}>
@@ -408,13 +436,19 @@ const MateriScreen = ({ route, navigation }) => {
                 </Text>
               </View>
             </View>
+            {/* --- Fix pointerEvents sudah benar --- */}
+            {!isPremium && (
+              <View style={styles.premiumLockOverlay} pointerEvents="none">
+                _ <Text style={styles.premiumLockText}>🔒</Text>
+              </View>
+            )}
           </TouchableOpacity>
         )}
 
-        {/* ... (Audio Player tidak berubah) ... */}
         {materi.summary && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Interaktivitas</Text>
+
             <TouchableOpacity
               style={styles.audioPlayer}
               onPress={handlePlayAudio}
@@ -422,43 +456,41 @@ const MateriScreen = ({ route, navigation }) => {
               <View style={styles.audioIconPlaceholder}>
                 <Text style={{ fontSize: 20 }}>{isSpeaking ? '⏹️' : '🔊'}</Text>
               </View>
+
               <View style={styles.audioTextContainer}>
                 <Text style={styles.audioTitle}>
                   {isSpeaking
                     ? 'Hentikan Suara AI'
                     : 'Dengar Ringkasan (Suara AI)'}
                 </Text>
+
                 <Text style={styles.audioSubtitle}>
                   {isSpeaking ? 'Sedang membaca...' : 'Fitur Text-to-Speech'}
                 </Text>
               </View>
+
+              {!isPremium && <Text style={styles.premiumLockIcon}>🔒</Text>}
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ... (Summary tidak berubah) ... */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ringkasan</Text>
           <Text style={styles.summaryText}>{summary}</Text>
         </View>
-
         <View style={{ height: 20 }} />
       </ScrollView>
-
-      {/* ... (InfoModal tidak berubah) ... */}
+      {/* --- PERBAIKAN 2 DI SINI --- */}
       <InfoModal
-        visible={modalInfo.visible}
+        isVisible={modalInfo.visible} // Ganti 'visible' menjadi 'isVisible'
         title={modalInfo.title}
         message={modalInfo.message}
         type={modalInfo.type}
         onClose={closeModal}
+        confirmText={modalInfo.confirmText}
+        onConfirm={modalInfo.onConfirm}
       />
 
-      {/* --- (PERBAIKAN) Hanya satu Modal Video --- */}
-
-      {/* HAPUS: Modal WebView */}
-
-      {/* Modal Untuk Video Langsung (.mp4) */}
       {video_url && (
         <Modal
           isVisible={isVideoModalVisible}
@@ -467,7 +499,6 @@ const MateriScreen = ({ route, navigation }) => {
           onBackdropPress={() => setIsVideoModalVisible(false)}
         >
           <SafeAreaView style={styles.videoSafeArea}>
-            {/* Hanya mount jika modal terlihat */}
             {isVideoModalVisible && (
               <Video
                 source={{ uri: video_url }}
@@ -476,9 +507,10 @@ const MateriScreen = ({ route, navigation }) => {
                 resizeMode="contain"
                 onBuffer={() => console.log('Buffering video...')}
                 onError={e => console.error('Video Error:', e)}
-                paused={!isVideoModalVisible} // Pause jika modal ditutup
+                paused={!isVideoModalVisible}
               />
             )}
+
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setIsVideoModalVisible(false)}
@@ -488,12 +520,11 @@ const MateriScreen = ({ route, navigation }) => {
           </SafeAreaView>
         </Modal>
       )}
-      {/* --- (BATAS PERBAIKAN) --- */}
     </SafeAreaView>
   );
 };
 
-// --- (STYLE Disederhanakan) ---
+// --- (STYLE TETAP SAMA) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   loadingContainer: {
@@ -607,7 +638,6 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   audioSubtitle: { fontSize: 12, color: '#888' },
-
   videoModalContainer: {
     margin: 0,
     justifyContent: 'center',
@@ -620,9 +650,7 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#000',
   },
-  // HAPUS: videoPlayer (WebView)
   videoPlayerDirect: {
-    // Untuk react-native-video
     width: '100%',
     height: '80%',
     alignSelf: 'center',
@@ -641,6 +669,21 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  premiumLockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 15,
+  },
+  premiumLockText: {
+    fontSize: 40,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  premiumLockIcon: {
+    fontSize: 20,
+    marginLeft: 10,
   },
 });
 

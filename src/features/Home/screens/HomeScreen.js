@@ -78,6 +78,7 @@ const HomeScreen = ({ navigation }) => {
           supabase
             .from('materi')
             .select('*')
+            .gt('likes', 0) // <<< TAMBAHKAN BARIS INI
             .order('likes', { ascending: false })
             .limit(10),
           supabase.from('materi').select('*').eq('category_id', 2).limit(10),
