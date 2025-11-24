@@ -112,7 +112,7 @@ const DiscussionChoiceScreen = ({ navigation }) => {
         message="Untuk mengakses fitur ini, Anda harus meng-upgrade akun Anda ke Premium."
         modalType="info" // Tipe 'info' (ikon info)
         onClose={() => setModalVisible(false)}
-        confirmText="Lihat Paket Premium"
+        confirmText="Upgrade"
         onConfirm={handleNavigateToPremium}
       />
       {/* --- (BATAS PERBAIKAN 5) --- */}

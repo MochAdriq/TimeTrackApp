@@ -26,6 +26,7 @@ import ChatIcon from '../assets/icon/ChatIcon.svg';
 import InfoIcon from '../assets/icon/InfoIcon.svg';
 import FriendIcon from '../assets/icon/FriendIcon.svg';
 import BackDrawerIcon from '../assets/icon/BackDrawerIcon.svg';
+import LougOutIcon from '../assets/icon/log-out.svg';
 const fallbackImage = require('../assets/images/dummyImage2.png');
 
 // Komponen Item Menu (Tidak diubah)
@@ -186,7 +187,7 @@ const CustomDrawerContent = props => {
       {/* ... (Bagian bottomSection (Logout) tetap sama) ... */}
       <View style={styles.bottomSection}>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <View style={styles.logoutIconPlaceholder} />
+          <LougOutIcon style={styles.logoutIconPlaceholder} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -352,7 +353,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     marginRight: 15,
-    backgroundColor: '#888',
+    // backgroundColor: '#888',
     borderRadius: 10,
   },
   logoutText: {

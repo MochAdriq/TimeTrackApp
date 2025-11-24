@@ -34,7 +34,7 @@ const QuizCard = ({ item, onPress }) => {
           <View style={styles.iconPlaceholder}>
             <Text style={{ fontSize: 10 }}>🕒</Text>
           </View>
-          <Text style={styles.detailText}>{item.duration}</Text>
+          <Text style={styles.detailText}>{item.duration} Menit</Text>
         </View>
       </View>
 

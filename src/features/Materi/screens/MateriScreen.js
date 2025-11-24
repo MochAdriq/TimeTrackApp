@@ -14,7 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import Tts from 'react-native-tts';
+import * as Speech from 'expo-speech';
 import Video from 'react-native-video';
 import { supabase } from '../../../services/supabaseClient';
 import InfoModal from '../../../components/common/InfoModal'; // Pastikan path ini benar
@@ -24,12 +24,6 @@ import { updateTaskProgress } from '../../../services/taskService';
 import { useProfile } from '../../../context/ProfileContext';
 
 const MIN_TIME_SPENT_MS = 10000;
-
-Tts.setDefaultLanguage('id-ID');
-Tts.setDefaultRate(0.5);
-if (Platform.OS === 'android') {
-  Tts.setDefaultPitch(1.0);
-}
 
 const MateriScreen = ({ route, navigation }) => {
   const { materiId } = route.params;
@@ -185,29 +179,6 @@ user_favorites ( count )
     };
   }, [loading, materi, tryCompleteTask]);
 
-  useEffect(() => {
-    const onStart = () => setIsSpeaking(true);
-    const onFinish = () => setIsSpeaking(false);
-    const onCancel = () => setIsSpeaking(false);
-    const onError = error => {
-      console.error('TTS Error:', error);
-      setIsSpeaking(false);
-      showError(
-        'Fitur Suara Gagal',
-        'Gagal memulai fitur suara AI. Coba lagi.',
-      );
-    };
-
-    Tts.addEventListener('tts-start', onStart);
-    Tts.addEventListener('tts-finish', onFinish);
-    Tts.addEventListener('tts-cancel', onCancel);
-    Tts.addEventListener('tts-error', onError);
-
-    return () => {
-      Tts.stop();
-    };
-  }, []);
-
   const handleLike = async () => {
     const {
       data: { user },
@@ -275,9 +246,8 @@ user_favorites ( count )
     }
   }; // ---
   const handlePlayAudio = () => {
-    // --- START: PREMIUM GATE ---
+    // --- START: PREMIUM GATE (Logika Anda sudah benar) ---
     if (!isPremium) {
-      console.log('Membuka modal premium untuk AUDIO...');
       setModalInfo({
         visible: true,
         type: 'info',
@@ -291,17 +261,47 @@ user_favorites ( count )
         },
       });
       return;
-    } // --- END: PREMIUM GATE ---
-    console.log('User premium, memutar audio...');
+    }
+    // --- END: PREMIUM GATE ---
+
+    // --- START: LOGIKA BARU EXPO-SPEECH ---
     if (isSpeaking) {
-      Tts.stop();
+      // Jika sedang berbicara, hentikan
+      Speech.stop();
+      // (Callback onDone/onStopped akan mengatur setIsSpeaking(false))
     } else {
+      // Jika tidak sedang berbicara, mulai
       if (materi?.summary) {
-        Tts.speak(materi.summary);
+        Speech.speak(materi.summary, {
+          language: 'id-ID', // <-- Konfigurasi dipindah ke sini
+          rate: 0.5, // <-- Konfigurasi dipindah ke sini
+          pitch: 1.0, // <-- Konfigurasi dipindah ke sini
+
+          // --- Callback pengganti Event Listener ---
+          onStart: () => {
+            setIsSpeaking(true);
+          },
+          onDone: () => {
+            setIsSpeaking(false);
+          },
+          onStopped: () => {
+            // Jika dihentikan manual
+            setIsSpeaking(false);
+          },
+          onError: error => {
+            console.error('Expo Speech Error:', error);
+            setIsSpeaking(false);
+            showError(
+              'Fitur Suara Gagal',
+              'Gagal memulai fitur suara AI. Coba lagi.',
+            );
+          },
+        });
       } else {
         showError('Error', 'Tidak ada teks ringkasan untuk dibaca.');
       }
     }
+    // --- END: LOGIKA BARU EXPO-SPEECH ---
   };
 
   const closeModal = () => {
@@ -344,16 +344,19 @@ user_favorites ( count )
               <Text style={{ color: '#fff', fontSize: 20 }}>{'<'}</Text>
             </View>
           </TouchableOpacity>
+
           <Text style={styles.headerTitle} numberOfLines={1}>
             Error
           </Text>
           <View style={{ width: 40 }} />
         </View>
+
         <View style={styles.loadingContainer}>
           <Text style={{ fontSize: 16, color: '#333' }}>
             Materi tidak dapat ditemukan.
           </Text>
         </View>
+
         <InfoModal
           isVisible={modalInfo.visible} // Ganti 'visible' menjadi 'isVisible'
           title={modalInfo.title}
@@ -376,7 +379,6 @@ user_favorites ( count )
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#6A453C" />
-
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -392,7 +394,6 @@ user_favorites ( count )
         </Text>
         <View style={{ width: 40 }} />
       </View>
-
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         onScroll={handleScroll}
@@ -418,7 +419,6 @@ user_favorites ( count )
         <Text style={styles.contentTitle}>{title}</Text>
         {videoThumbSource && (
           <TouchableOpacity
-            _
             style={styles.videoContainer}
             onPress={handlePlayVideo}
             activeOpacity={0.8}
@@ -427,6 +427,7 @@ user_favorites ( count )
               source={videoThumbSource}
               style={styles.videoThumbnail}
               resizeMode="cover"
+              _
             />
 
             <View style={styles.playIconOverlay}>
@@ -439,7 +440,7 @@ user_favorites ( count )
             {/* --- Fix pointerEvents sudah benar --- */}
             {!isPremium && (
               <View style={styles.premiumLockOverlay} pointerEvents="none">
-                _ <Text style={styles.premiumLockText}>🔒</Text>
+                <Text style={styles.premiumLockText}>🔒</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -448,7 +449,6 @@ user_favorites ( count )
         {materi.summary && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Interaktivitas</Text>
-
             <TouchableOpacity
               style={styles.audioPlayer}
               onPress={handlePlayAudio}
@@ -456,7 +456,6 @@ user_favorites ( count )
               <View style={styles.audioIconPlaceholder}>
                 <Text style={{ fontSize: 20 }}>{isSpeaking ? '⏹️' : '🔊'}</Text>
               </View>
-
               <View style={styles.audioTextContainer}>
                 <Text style={styles.audioTitle}>
                   {isSpeaking
@@ -468,7 +467,6 @@ user_favorites ( count )
                   {isSpeaking ? 'Sedang membaca...' : 'Fitur Text-to-Speech'}
                 </Text>
               </View>
-
               {!isPremium && <Text style={styles.premiumLockIcon}>🔒</Text>}
             </TouchableOpacity>
           </View>
@@ -490,7 +488,6 @@ user_favorites ( count )
         confirmText={modalInfo.confirmText}
         onConfirm={modalInfo.onConfirm}
       />
-
       {video_url && (
         <Modal
           isVisible={isVideoModalVisible}

@@ -13,6 +13,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Linking, // <<< 1. IMPORT Linking (untuk buka URL)
 } from 'react-native';
 
 import PeopleIcon from '../../../assets/icon/PeopleIcon.svg';
@@ -31,10 +32,12 @@ const RegisterScreen = ({ navigation }) => {
   const [isEmailFocused, setIsEmailFocused] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // <<< 1. TAMBAHKAN STATE UNTUK VISIBILITY PASSWORD >>>
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     useState(false);
+
+  // <<< 2. TAMBAHKAN STATE UNTUK CHECKBOX >>>
+  const [agreedToPolicy, setAgreedToPolicy] = useState(false);
 
   const [modalState, setModalState] = useState({
     isVisible: false,
@@ -90,8 +93,20 @@ const RegisterScreen = ({ navigation }) => {
     const trimmedEmail = email.trim();
     const trimmedUsername = username.trim().toLowerCase();
     const trimmedFullName = fullName.trim();
-    const trimmedPhoneNumber = phoneNumber.trim(); // <<< AMBIL NOMOR TELEPON
+    const trimmedPhoneNumber = phoneNumber.trim();
     const trimmedPassword = password.trim();
+
+    // <<< 3. TAMBAHKAN VALIDASI CHECKBOX >>>
+    if (!agreedToPolicy) {
+      setModalState({
+        isVisible: true,
+        title: 'Persetujuan Diperlukan',
+        message: 'Anda harus menyetujui Kebijakan Privasi untuk mendaftar.',
+        modalType: 'error',
+      });
+      return;
+    }
+    // <<< BATAS TAMBAHAN >>>
 
     // Validasi
     if (
@@ -99,7 +114,7 @@ const RegisterScreen = ({ navigation }) => {
       !trimmedPassword ||
       !trimmedFullName ||
       !trimmedUsername ||
-      !trimmedPhoneNumber // <<< Validasi nomor telepon
+      !trimmedPhoneNumber
     ) {
       setModalState({
         isVisible: true,
@@ -125,17 +140,14 @@ const RegisterScreen = ({ navigation }) => {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: trimmedEmail,
         password: trimmedPassword,
-        phone: trimmedPhoneNumber, // <<< Simpan ke auth.users
+        phone: trimmedPhoneNumber,
         options: {
-          // --- TAMBAHKAN INI ---
-          // Arahkan user ke link ini setelah klik email konfirmasi
-          // Ini akan memicu Deep Link yang kita atur
           emailRedirectTo: 'com.timetrackerapp://callback',
-          // --- BATAS TAMBAHAN ---
           data: {
             full_name: trimmedFullName,
             username: trimmedUsername,
-            mobile_no: trimmedPhoneNumber, // <<< PERBAIKAN: Simpan ke public.profiles
+            mobile_no: trimmedPhoneNumber,
+            has_accepted_policy: true, // <<< 4. TAMBAHKAN FLAG INI
           },
         },
       });
@@ -154,14 +166,14 @@ const RegisterScreen = ({ navigation }) => {
         isVisible: true,
         title: 'Pendaftaran Berhasil!',
         message:
-          'Akun Anda telah dibuat. Silakan cek email Anda untuk link konfirmasi.\nSetelah menekan link silahkan lakukan login kembali dengan akun yang di daftarkan',
+          'Akun Anda telah dibuat. Silakan cek email Anda untuk link konfirmasi.\nSetelah menekan link silahkan login kembali.',
         modalType: 'success',
         onClose: () => navigation.navigate('Login'),
       });
     } catch (error) {
       setLoading(false);
       const friendlyError = handleSupabaseError(error);
-      console.error('Error Registrasi (Magic Link):', error.message);
+      console.error('Error Registrasi:', error.message);
       setModalState({
         isVisible: true,
         title: 'Pendaftaran Gagal',
@@ -173,7 +185,11 @@ const RegisterScreen = ({ navigation }) => {
   // --- BATAS MODIFIKASI ---
 
   const handlePrivacyPolicy = () => {
-    console.log('Open Privacy Policy');
+    // <<< 5. BUAT INI MEMBUKA LINK (GANTI DENGAN URL ASLI BOSS) >>>
+    const privacyPolicyUrl = 'https://web-time-track.vercel.app/privacy'; // GANTI INI
+    Linking.openURL(privacyPolicyUrl).catch(err =>
+      console.error('Gagal membuka URL:', err),
+    );
   };
 
   return (
@@ -254,7 +270,6 @@ const RegisterScreen = ({ navigation }) => {
             </View>
           </View>
 
-          {/* --- MODIFIKASI PASSWORD DIMULAI DI SINI --- */}
           {/* Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
@@ -265,22 +280,19 @@ const RegisterScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry={!isPasswordVisible} // <<< 2. BUAT DINAMIS
+                secureTextEntry={!isPasswordVisible}
                 autoCapitalize="none"
               />
-              {/* <<< 3. GANTI LockIcon DENGAN TOMBOL MATA >>> */}
               <TouchableOpacity
                 style={styles.iconPlaceholder}
                 onPress={() => setIsPasswordVisible(!isPasswordVisible)}
               >
-                {/* Ganti dengan Ikon Mata SVG nanti. Ini placeholder: */}
-                <Text style={{ fontSize: 24, color: '#555' }}>
-                  {isPasswordVisible ? (
-                    <EyeClosedIcon width={24} height={24} />
-                  ) : (
-                    <EyeOpenIcon width={24} height={24} />
-                  )}
-                </Text>
+                {/* <<< (PERBAIKAN BONUS) Gunakan SVG yang sudah di-import >>> */}
+                {isPasswordVisible ? (
+                  <EyeOpenIcon width={24} height={24} />
+                ) : (
+                  <EyeClosedIcon width={24} height={24} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -295,27 +307,44 @@ const RegisterScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                secureTextEntry={!isConfirmPasswordVisible} // <<< 4. BUAT DINAMIS
+                secureTextEntry={!isConfirmPasswordVisible}
                 autoCapitalize="none"
               />
-              {/* <<< 5. GANTI LockIcon DENGAN TOMBOL MATA >>> */}
               <TouchableOpacity
                 style={styles.iconPlaceholder}
                 onPress={() =>
                   setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
                 }
               >
-                {/* Ganti dengan Ikon Mata SVG nanti. Ini placeholder: */}
-                <Text style={{ fontSize: 24, color: '#555' }}>
-                  {isPasswordVisible ? (
-                    <EyeClosedIcon width={24} height={24} />
-                  ) : (
-                    <EyeOpenIcon width={24} height={24} />
-                  )}
-                </Text>
+                {/* <<< (PERBAIKAN BONUS) Gunakan SVG yang sudah di-import >>> */}
+                {isConfirmPasswordVisible ? (
+                  <EyeOpenIcon width={24} height={24} />
+                ) : (
+                  <EyeClosedIcon width={24} height={24} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* <<< 6. TAMBAHKAN UI CHECKBOX BARU >>> */}
+          <View style={styles.checkboxContainer}>
+            <TouchableOpacity
+              style={styles.checkbox}
+              onPress={() => setAgreedToPolicy(!agreedToPolicy)}
+            >
+              {agreedToPolicy && <View style={styles.checkboxInner} />}
+            </TouchableOpacity>
+            <View style={styles.privacyTextContainer}>
+              <Text style={styles.privacyText}>
+                Saya telah membaca dan menyetujui{' '}
+              </Text>
+              <TouchableOpacity onPress={handlePrivacyPolicy}>
+                <Text style={styles.privacyLink}>Kebijakan Privasi</Text>
+              </TouchableOpacity>
+              <Text style={styles.privacyText}>.</Text>
+            </View>
+          </View>
+          {/* <<< BATAS UI CHECKBOX >>> */}
 
           <TouchableOpacity
             style={styles.actionButton}
@@ -338,12 +367,7 @@ const RegisterScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handlePrivacyPolicy}
-            style={styles.privacyButton}
-          >
-            <Text style={styles.privacyText}>Privacy Policy</Text>
-          </TouchableOpacity>
+          {/* <<< 7. HAPUS TOMBOL PRIVACY POLICY LAMA >>> */}
         </View>
       </ScrollView>
 
@@ -358,6 +382,7 @@ const RegisterScreen = ({ navigation }) => {
   );
 };
 
+// <<< 8. TAMBAHKAN STYLE BARU UNTUK CHECKBOX >>>
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -411,8 +436,8 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   iconPlaceholder: {
-    paddingHorizontal: 12, // Beri padding yg sama di kiri/kanan
-    minWidth: 40, // Samakan lebar minimum
+    paddingHorizontal: 12,
+    minWidth: 40,
     alignItems: 'center',
   },
   actionButton: {
@@ -420,7 +445,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 15,
     alignItems: 'center',
-    marginTop: 25,
+    marginTop: 25, // Tetap 25, karena checkbox ada di atasnya
     elevation: 3,
     minHeight: 52,
     justifyContent: 'center',
@@ -430,13 +455,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  privacyButton: {
-    marginTop: 20,
-  },
   privacyText: {
     color: '#888',
     fontSize: 12,
     textAlign: 'center',
+  },
+  // --- Style Baru ---
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 5,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#6A453C',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  checkboxInner: {
+    width: 12,
+    height: 12,
+    backgroundColor: '#6A453C',
+  },
+  privacyTextContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  privacyLink: {
+    fontSize: 12,
+    color: '#6A453C',
+    fontWeight: 'bold',
+    textDecorationLine: 'underline',
   },
 });
 

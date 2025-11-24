@@ -1,5 +1,5 @@
 // src/features/Favorites/screens/FavoriteScreen.js
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   SafeAreaView,
@@ -8,7 +8,7 @@ import {
   View,
   Text,
   ActivityIndicator,
-  RefreshControl, // <<< 1. Import RefreshControl
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../services/supabaseClient';
@@ -17,6 +17,7 @@ import FavoriteItem from '../components/FavoriteItem';
 import FavoriteHeader from '../components/FavoriteHeader';
 import FavoriteInfo from '../components/FavoriteInfo';
 import SearchBar from '../../Home/components/SearchBar';
+import { useProfile } from '../../../context/ProfileContext';
 
 const filterMateri = (data, query) => {
   if (!query) {
@@ -29,65 +30,108 @@ const filterMateri = (data, query) => {
 const FavoriteScreen = ({ navigation }) => {
   const [favorites, setFavorites] = useState([]);
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // <<< UBAH KEMBALI ke true
   const [modalInfo, setModalInfo] = useState({ visible: false, message: '' });
   const [searchQuery, setSearchQuery] = useState('');
-  const [refreshing, setRefreshing] = useState(false); // <<< 2. Tambah state refreshing
+  const [refreshing, setRefreshing] = useState(false);
 
-  // --- (PERBAIKAN) Ekstrak fetchData ---
-  const fetchData = useCallback(async (isRefresh = false) => {
-    // Hanya tampilkan loader fullscreen jika BUKAN refresh
-    if (!isRefresh) {
-      setLoading(true);
-    }
+  const { profile: contextProfile, loading: contextLoading } = useProfile();
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
 
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !user) throw authError || new Error('User not found');
+  // --- (PERBAIKAN 1) Dependency Array (Stale Closure Bug Fix) ---
+  // Kita harus daftarkan semua 'setter' yang digunakan di dalam
+  // agar fungsi ini di-rebuild dengan benar.
+  const fetchData = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) {
+        setLoading(true);
+      }
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+        if (authError || !user) throw authError || new Error('User not found');
 
-      const [favoritesResponse, profileResponse] = await Promise.all([
-        supabase
-          .from('user_favorites')
-          .select('materi ( *, categories ( name ) )')
-          .eq('user_id', user.id),
-        supabase
-          .from('profiles')
-          .select('full_name, level, points')
-          .eq('id', user.id)
-          .single(),
-      ]);
+        const [favoritesResponse, profileResponse] = await Promise.all([
+          supabase
+            .from('user_favorites')
+            .select('materi ( *, categories ( name ) )')
+            .eq('user_id', user.id),
+          supabase
+            .from('profiles')
+            .select('full_name, level, points')
+            .eq('id', user.id)
+            .single(),
+        ]);
 
-      if (favoritesResponse.error) throw favoritesResponse.error;
-      if (profileResponse.error) throw profileResponse.error;
+        if (favoritesResponse.error) throw favoritesResponse.error;
+        if (profileResponse.error) throw profileResponse.error;
 
-      setFavorites(favoritesResponse.data.map(fav => fav.materi));
-      setProfile(profileResponse.data);
-    } catch (error) {
-      setModalInfo({ visible: true, message: error.message });
-    } finally {
-      // Selalu matikan kedua loader
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []); // <<< 3. Tambahkan dependency array kosong
-  // --- (BATAS PERBAIKAN) ---
+        setFavorites(favoritesResponse.data.map(fav => fav.materi));
+        setProfile(profileResponse.data);
+      } catch (error) {
+        setModalInfo({ visible: true, message: error.message });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [setFavorites, setProfile, setModalInfo, setLoading, setRefreshing],
+  ); // <<< INI PERBAIKANNYA
+  // --- (BATAS PERBAIKAN 1) ---
 
-  // --- (PERBAIKAN) Panggil fetchData dengan benar ---
+  // --- (PERBAIKAN 2) Logika Premium Gate Diperbaiki ---
   useFocusEffect(
     useCallback(() => {
-      fetchData(false); // 'false' berarti ini loading awal
-    }, [fetchData]), // <<< 4. Tambahkan fetchData sebagai dependency
-  );
+      // 1. Tunggu sampai context profile SELESAI loading
+      if (contextLoading) {
+        setLoading(true); // Tampilkan spinner fullscreen saat context loading
+        setPremiumModalVisible(false); // Sembunyikan modal (jika ada)
+        return; // Belum siap, tunggu re-render
+      }
 
-  // --- (FITUR BARU) Fungsi onRefresh ---
+      // 2. Context sudah selesai loading.
+      //    SEKARANG baru kita hitung status premium dari data FRESH
+      const isUserPremium = contextProfile?.plan === 'premium';
+
+      if (!isUserPremium) {
+        // 3. JIKA BUKAN: Tampilkan modal premium
+        setPremiumModalVisible(true);
+        setLoading(false); // Matikan loader fullscreen
+        setRefreshing(false);
+        setFavorites([]);
+        setProfile(null);
+      } else {
+        // 4. JIKA IYA: User premium, ambil data favoritnya
+        setPremiumModalVisible(false);
+        fetchData(false);
+      }
+    }, [contextLoading, contextProfile, fetchData]), // <<< Dependencies diperbarui
+  );
+  // --- (BATAS PERBAIKAN 2) ---
+
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchData(true); // 'true' berarti ini adalah refresh
-  }, [fetchData]); // <<< 5. Tambahkan fetchData sebagai dependency
-  // ---
+    // Cek status premium dari context TERBARU
+    const isUserPremium = contextProfile?.plan === 'premium';
+    if (isUserPremium) {
+      setRefreshing(true);
+      fetchData(true);
+    }
+  }, [fetchData, contextProfile]); // <<< Tambah dependency contextProfile
+
+  const handleGoToPremium = () => {
+    setPremiumModalVisible(false);
+    navigation.navigate('Premium');
+  };
+
+  const handleGoToJelajah = () => {
+    setPremiumModalVisible(false);
+    navigation.navigate('MainApp', {
+      screen: 'MainTabs',
+      params: { screen: 'Jelajah' },
+    });
+  };
 
   const handleItemPress = item => {
     navigation.navigate('MateriDetail', {
@@ -118,9 +162,9 @@ const FavoriteScreen = ({ navigation }) => {
     </View>
   );
 
-  // --- (PERBAIKAN) Logika Loading ---
-  // Tampilkan loader HANYA jika loading awal, BUKAN saat refresh
-  if (loading && !profile && !refreshing) {
+  // --- (PERBAIKAN 3) Logika Loading ---
+  // Tampilkan loader jika context loading ATAU jika fetchData loading
+  if ((loading || contextLoading) && !refreshing) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -132,58 +176,72 @@ const FavoriteScreen = ({ navigation }) => {
     );
   }
 
+  // (PERBAIKAN 4) Hitung isPremium TEPAT sebelum render
+  const isPremiumForRender = contextProfile?.plan === 'premium';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <FavoriteHeader navigation={navigation} title="Favorit Saya" />
 
-      {/* --- (PERBAIKAN) Tambahkan RefreshControl ke FlatList --- */}
       <FlatList
         data={filteredFavorites}
         renderItem={renderItem}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         ListHeaderComponent={
-          <>
-            <FavoriteInfo
-              userName={profile?.full_name || 'Pengguna'}
-              level={profile?.level || 1}
-              points={profile?.points || 0}
-            />
-            <View style={styles.searchBarWrapper}>
-              <SearchBar
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
+          isPremiumForRender &&
+          !loading && (
+            <>
+              <FavoriteInfo
+                userName={profile?.full_name || 'Pengguna'}
+                level={profile?.level || 1}
+                points={profile?.points || 0}
               />
-            </View>
-          </>
+              <View style={styles.searchBarWrapper}>
+                <SearchBar
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </View>
+            </>
+          )
         }
-        ListEmptyComponent={renderEmptyList}
-        // --- (INI KODENYA) ---
+        ListEmptyComponent={isPremiumForRender ? renderEmptyList : null}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#6A453C']} // Warna spinner (Android)
-            tintColor={'#6A453C'} // Warna spinner (iOS)
+            colors={['#6A453C']}
+            tintColor={'#6A453C'}
+            enabled={isPremiumForRender}
           />
         }
-        // ---
       />
-      {/* --- (BATAS PERBAIKAN) --- */}
 
+      {/* Modal untuk Error Fetching */}
       <InfoModal
-        visible={modalInfo.visible}
+        isVisible={modalInfo.visible}
         title="Error"
         message={modalInfo.message}
-        type="error"
+        modalType="error"
         onClose={() => setModalInfo({ visible: false, message: '' })}
+      />
+
+      {/* Modal Premium Gate */}
+      <InfoModal
+        isVisible={premiumModalVisible}
+        title="Fitur Premium"
+        message="Halaman Favorit hanya bisa diakses oleh pengguna Premium. Upgrade akun Anda untuk lanjut."
+        modalType="info"
+        onClose={handleGoToJelajah}
+        confirmText="Upgrade"
+        onConfirm={handleGoToPremium}
       />
     </SafeAreaView>
   );
 };
 
-// --- (STYLES tidak berubah) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -192,7 +250,7 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingHorizontal: 15,
     paddingBottom: 20,
-    flexGrow: 1, // <<< Pastikan ini ada agar refresh control jalan walau list kosong
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,

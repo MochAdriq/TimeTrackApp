@@ -24,7 +24,14 @@ import InfoModal from '../../../components/common/InfoModal';
 import { useProfile } from '../../../context/ProfileContext';
 import { supabase } from '../../../services/supabaseClient';
 
-import HelpIcon from '../../../assets/icon/HelpIcon.svg';
+import EditIcon from '../../../assets/icon/edit-pencil.svg';
+import LevelIcon from '../../../assets/icon/level-trophy.svg';
+import PointIcon from '../../../assets/icon/point-star.svg';
+import ChangePasswordIcon from '../../../assets/icon/change-password.svg';
+import HelpIcon from '../../../assets/icon/help-question';
+import LogoutIcon from '../../../assets/icon/log-out.svg';
+import CheckIcon from '../../../assets/icon/check.svg';
+import CancelIcon from '../../../assets/icon/cancel-x.svg';
 
 // --- Komponen Aksi (ActionItem) ---
 const ActionItem = ({ icon, label, onPress, isLast, isLogout }) => (
@@ -32,9 +39,7 @@ const ActionItem = ({ icon, label, onPress, isLast, isLogout }) => (
     style={[styles.actionItem, isLast && styles.actionItemLast]}
     onPress={onPress}
   >
-    <View style={styles.actionIconContainer}>
-      <Text style={styles.actionIconText}>{icon}</Text>
-    </View>
+    <View style={styles.actionIconContainer}>{icon}</View>
     <Text style={[styles.actionLabel, isLogout && styles.logoutText]}>
       {label}
     </Text>
@@ -298,7 +303,7 @@ const ProfileScreen = ({ navigation }) => {
               onPress={handleCancelEdit}
               style={styles.headerButton}
             >
-              <Text style={styles.headerButtonText}>❌</Text>
+              <CancelIcon width={24} height={24} stroke="#333" />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -309,7 +314,7 @@ const ProfileScreen = ({ navigation }) => {
               {isSaving ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.headerButtonSaveText}>✅</Text>
+                <CheckIcon width={24} height={24} stroke="#00ff00" />
               )}
             </TouchableOpacity>
           </View>
@@ -318,7 +323,7 @@ const ProfileScreen = ({ navigation }) => {
             onPress={() => setIsEditing(true)}
             style={styles.headerButton}
           >
-            <Text style={styles.headerButtonText}>✏️</Text>
+            <EditIcon width={24} height={24} stroke="#333" />
           </TouchableOpacity>
         )}
       </View>
@@ -348,7 +353,7 @@ const ProfileScreen = ({ navigation }) => {
 
             {isEditing && (
               <View style={styles.editIconSmallContainer}>
-                <Text style={styles.editIconSmallText}>✏️</Text>
+                <EditIcon width={12} height={12} stroke="#FFFFFF" />
               </View>
             )}
           </TouchableOpacity>
@@ -359,13 +364,13 @@ const ProfileScreen = ({ navigation }) => {
         <TouchableOpacity>
           <View style={styles.statsContainer}>
             <View style={styles.statBox}>
-              <Text style={styles.statIcon}>🏆</Text>
+              <LevelIcon width={28} height={28} stroke="#333" />
               <Text style={styles.statValue}>{profileData.level}</Text>
               <Text style={styles.statLabel}>Level</Text>
             </View>
             <View style={styles.statSeparator} />
             <View style={styles.statBox}>
-              <Text style={styles.statIcon}>🔖</Text>
+              <PointIcon width={28} height={28} stroke="#333" fill="#FFD700" />
               <Text style={styles.statValue}>
                 {profileData.points.toLocaleString('id-ID')}
               </Text>
@@ -464,12 +469,14 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Pengaturan</Text>
           <ActionItem
-            icon="🔒"
+            icon={
+              <ChangePasswordIcon width={22} height={22} stroke="#4A2F2F" />
+            }
             label="Ganti Password"
             onPress={handleChangePassword}
           />
           <ActionItem
-            icon="❓"
+            icon={<HelpIcon width={22} height={22} stroke="#4A2F2F" />}
             label="Bantuan & Dukungan"
             onPress={handleHelp}
             isLast
@@ -477,7 +484,7 @@ const ProfileScreen = ({ navigation }) => {
         </View>
         <View style={[styles.card, styles.logoutCard]}>
           <ActionItem
-            icon="🔄"
+            icon={<LogoutIcon width={22} height={22} stroke="#E53935" />}
             label="Keluar"
             onPress={handleLogout}
             isLast
@@ -544,7 +551,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   headerButtonSave: {
-    backgroundColor: '#6A453C',
+    backgroundColor: '#00ff00',
     borderRadius: 8,
     padding: 4,
     paddingHorizontal: 5,

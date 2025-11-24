@@ -156,7 +156,7 @@ const QuizListScreen = ({ navigation }) => {
           </View>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>H, {userProfile.name}</Text>
+          <Text style={styles.profileName}>Hi, {userProfile.name}</Text>
           <Text style={styles.profileSubtext}>Good Morning</Text>
           <View style={styles.levelContainer}>
             <Text style={styles.levelText}>Level {userProfile.level}</Text>

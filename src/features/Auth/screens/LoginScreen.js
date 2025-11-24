@@ -270,7 +270,7 @@ const LoginScreen = ({ navigation }) => {
         </View>
 
         {/* Bottom Section */}
-        <View style={styles.bottomSection}>
+        {/* <View style={styles.bottomSection}>
           <View style={styles.socialLoginContainer}>
             <TouchableOpacity
               onPress={() => handleSocialLogin('Google')}
@@ -291,10 +291,7 @@ const LoginScreen = ({ navigation }) => {
               <InstagramLogo />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={handlePrivacyPolicy}>
-            <Text style={styles.privacyText}>Privacy Policy</Text>
-          </TouchableOpacity>
-        </View>
+        </View> */}
       </ScrollView>
 
       {/* Modal */}
